@@ -2,18 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
 from ..database import get_session
-from ..models import (
-    Client,
-    ClientProblem,
-    OutcomeScore,
-    CareIntervention,
-    InterventionTarget,
-)
+from ..models import Client, ClientProblem, OutcomeScore, CareIntervention
+from sqlalchemy import desc
 from ..schemas import (
     CarePlan,
     ClientProblemRead,
     OutcomeScoreRead,
     CareInterventionRead,
+    ClientProblemSymptomRead,
 )
 
 router = APIRouter(prefix="/clients", tags=["care-plans"])
@@ -22,7 +18,7 @@ router = APIRouter(prefix="/clients", tags=["care-plans"])
 @router.get("/{client_id}/care-plan", response_model=CarePlan)
 def get_care_plan(client_id: int, session: Session = Depends(get_session)):
     client = session.get(Client, client_id)
-    if not client:
+    if not client or client.deleted_at:
         raise HTTPException(status_code=404, detail="Client not found")
 
     # Get active problems for the client
@@ -38,7 +34,7 @@ def get_care_plan(client_id: int, session: Session = Depends(get_session)):
         latest_score_db = session.exec(
             select(OutcomeScore)
             .where(OutcomeScore.client_problem_id == cp.client_problem_id)
-            .order_by(OutcomeScore.date_recorded.desc())
+            .order_by(desc(OutcomeScore.date_recorded))  # type: ignore
         ).first()
 
         latest_score_read = (
@@ -54,24 +50,22 @@ def get_care_plan(client_id: int, session: Session = Depends(get_session)):
             )
         ).all()
 
-        interventions_read = []
-        for i in interventions_db:
-            intervention_dict = i.model_dump()
-            intervention_dict["target"] = session.get(InterventionTarget, i.target_id)
-            interventions_read.append(
-                CareInterventionRead.model_validate(intervention_dict)
-            )
-
         if cp.client_problem_id is not None:
             problem_read = ClientProblemRead(
                 client_problem_id=cp.client_problem_id,
                 problem=cp.problem,
                 modifier_status=cp.modifier_status,
                 modifier_subject=cp.modifier_subject,
-                symptoms=cp.symptoms,
+                # The relationship loader will populate these based on the model
+                selected_symptoms=[
+                    ClientProblemSymptomRead.model_validate(s)
+                    for s in cp.selected_symptoms
+                ],
                 active=cp.active,
                 latest_score=latest_score_read,
-                interventions=interventions_read,
+                interventions=[
+                    CareInterventionRead.model_validate(i) for i in interventions_db
+                ],
             )
             care_plan_problems.append(problem_read)
 

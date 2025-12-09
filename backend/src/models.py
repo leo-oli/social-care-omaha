@@ -1,87 +1,211 @@
-from datetime import date, datetime
-from typing import List
+import uuid
+from datetime import date, datetime, timezone
 
-from sqlmodel import Field, Relationship, SQLModel
+from sqlmodel import Field, Relationship, SQLModel, Column, DateTime
+
+# ==========================================
+# 1. STATIC TABLES (Taxonomy)
+# ==========================================
+
+
+class OutcomePhase(SQLModel, table=True):
+    __tablename__ = "outcome_phase"  # type: ignore
+    phase_id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(unique=True)
+
+
+# ==========================================
+# 1. STATIC TABLES (Taxonomy)
+# ==========================================
 
 
 class OmahaDomain(SQLModel, table=True):
-    domain_id: int = Field(default=None, primary_key=True)
-    name: str
+    __tablename__ = "omaha_domain"  # type: ignore
+    domain_id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(unique=True)
 
-    problems: List["OmahaProblem"] = Relationship(back_populates="domain")
+    problems: list["OmahaProblem"] = Relationship(back_populates="domain")
 
 
 class OmahaProblem(SQLModel, table=True):
-    problem_id: int = Field(default=None, primary_key=True)
+    __tablename__ = "omaha_problem"  # type: ignore
+    problem_id: int | None = Field(default=None, primary_key=True)
+    domain_id: int = Field(foreign_key="omaha_domain.domain_id")
     name: str
-    domain_id: int = Field(foreign_key="omahadomain.domain_id")
 
     domain: OmahaDomain = Relationship(back_populates="problems")
+    possible_symptoms: list["Symptom"] = Relationship(back_populates="problem")
+
+
+class Symptom(SQLModel, table=True):
+    __tablename__ = "symptom"  # type: ignore
+    symptom_id: int | None = Field(default=None, primary_key=True)
+    problem_id: int = Field(foreign_key="omaha_problem.problem_id")
+    description: str
+
+    problem: OmahaProblem = Relationship(back_populates="possible_symptoms")
 
 
 class InterventionTarget(SQLModel, table=True):
-    target_id: int = Field(default=None, primary_key=True)
-    name: str
+    __tablename__ = "intervention_target"  # type: ignore
+    target_id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(unique=True)
+
+
+class InterventionCategory(SQLModel, table=True):
+    __tablename__ = "intervention_category"  # type: ignore
+    category_id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(unique=True)
 
 
 class ModifierStatus(SQLModel, table=True):
-    status_id: int = Field(default=None, primary_key=True)
-    name: str
+    __tablename__ = "modifier_status"  # type: ignore
+    status_id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(unique=True)
 
 
 class ModifierSubject(SQLModel, table=True):
-    subject_id: int = Field(default=None, primary_key=True)
-    name: str
+    __tablename__ = "modifier_subject"  # type: ignore
+    subject_id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(unique=True)
+
+
+# ==========================================
+# 2. DYNAMIC TABLES (Client & Clinical Data)
+# ==========================================
+
+
+class ClientPII(SQLModel, table=True):
+    __tablename__ = "client_pii"  # type: ignore
+    id: int | None = Field(default=None, primary_key=True)
+    client_id: int = Field(foreign_key="client.client_id", unique=True)
+    first_name: str  # Note: Handle encryption in application logic
+    last_name: str  # Note: Handle encryption in application logic
+    date_of_birth: date
+    email: str | None = None
+    address: str | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime, onupdate=lambda: datetime.now(timezone.utc)),
+    )
+
+    client: "Client" = Relationship(back_populates="pii")
+
+
+class ClientConsent(SQLModel, table=True):
+    __tablename__ = "client_consent"  # type: ignore
+    consent_id: int | None = Field(default=None, primary_key=True)
+    client_id: int = Field(foreign_key="client.client_id")
+    consent_type: str
+    has_consented: bool
+    ip_address: str | None = None
+    granted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    revoked_at: datetime | None = None
+
+    client: "Client" = Relationship(back_populates="consents")
 
 
 class Client(SQLModel, table=True):
-    client_id: int = Field(default=None, primary_key=True)
-    first_name: str
-    last_name: str
-    date_of_birth: date
+    __tablename__ = "client"  # type: ignore
+    client_id: int | None = Field(default=None, primary_key=True)
+    client_uuid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True)
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, onupdate=lambda: datetime.now(timezone.utc))
+    )
+    deleted_at: datetime | None = None
 
-    problems: List["ClientProblem"] = Relationship(back_populates="client")
+    pii: ClientPII | None = Relationship(back_populates="client")
+    consents: list["ClientConsent"] = Relationship(back_populates="client")
+    problems: list["ClientProblem"] = Relationship(back_populates="client")
 
 
 class ClientProblem(SQLModel, table=True):
+    __tablename__ = "client_problem"  # type: ignore
     client_problem_id: int | None = Field(default=None, primary_key=True)
     client_id: int = Field(foreign_key="client.client_id")
-    problem_id: int = Field(foreign_key="omahaproblem.problem_id")
-    status_id: int = Field(foreign_key="modifierstatus.status_id")
-    subject_id: int = Field(foreign_key="modifiersubject.subject_id")
-    symptoms: str | None = None  # Comma-separated
+    problem_id: int = Field(foreign_key="omaha_problem.problem_id")
+    status_id: int = Field(foreign_key="modifier_status.status_id")
+    subject_id: int = Field(foreign_key="modifier_subject.subject_id")
     active: bool = Field(default=True)
 
+    # Audit timestamps
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, onupdate=lambda: datetime.now(timezone.utc))
+    )
+    deleted_at: datetime | None = None
+
     client: Client = Relationship(back_populates="problems")
-    problem: "OmahaProblem" = Relationship()
-    modifier_status: "ModifierStatus" = Relationship()
-    modifier_subject: "ModifierSubject" = Relationship()
-    scores: List["OutcomeScore"] = Relationship(back_populates="client_problem")
-    interventions: List["CareIntervention"] = Relationship(
+    problem: OmahaProblem = Relationship()
+    modifier_status: ModifierStatus = Relationship()
+    modifier_subject: ModifierSubject = Relationship()
+
+    # Relationships to child tables
+    selected_symptoms: list["ClientProblemSymptom"] = Relationship(
+        back_populates="client_problem"
+    )
+    scores: list["OutcomeScore"] = Relationship(back_populates="client_problem")
+    interventions: list["CareIntervention"] = Relationship(
         back_populates="client_problem"
     )
 
 
+class ClientProblemSymptom(SQLModel, table=True):
+    __tablename__ = "client_problem_symptom"  # type: ignore
+    client_pii_id: int | None = Field(default=None, primary_key=True)
+    client_problem_id: int = Field(foreign_key="client_problem.client_problem_id")
+    symptom_id: int = Field(foreign_key="symptom.symptom_id")
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, onupdate=lambda: datetime.now(timezone.utc))
+    )
+    deleted_at: datetime | None = None
+
+    client_problem: ClientProblem = Relationship(back_populates="selected_symptoms")
+    symptom: Symptom = Relationship()
+
+
 class OutcomeScore(SQLModel, table=True):
-    outcome_score_id: int | None = Field(default=None, primary_key=True)
-    client_problem_id: int = Field(foreign_key="clientproblem.client_problem_id")
+    __tablename__ = "outcome_score"  # type: ignore
+    score_id: int | None = Field(default=None, primary_key=True)
+    client_problem_id: int = Field(foreign_key="client_problem.client_problem_id")
+
+    phase_id: int = Field(foreign_key="outcome_phase.phase_id")
     rating_knowledge: int
     rating_behavior: int
     rating_status: int
-    date_recorded: datetime = Field(default_factory=datetime.utcnow)
+
+    date_recorded: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, onupdate=lambda: datetime.now(timezone.utc))
+    )
+    deleted_at: datetime | None = None
 
     client_problem: ClientProblem = Relationship(back_populates="scores")
+    phase: OutcomePhase = Relationship()
 
 
 class CareIntervention(SQLModel, table=True):
+    __tablename__ = "care_intervention"  # type: ignore
     intervention_id: int | None = Field(default=None, primary_key=True)
-    client_problem_id: int = Field(foreign_key="clientproblem.client_problem_id")
-    target_id: int = Field(foreign_key="interventiontarget.target_id")
-    cat_teaching: bool = Field(default=False)
-    cat_treatments: bool = Field(default=False)
-    cat_casemgmt: bool = Field(default=False)
-    cat_surveillance: bool = Field(default=False)
-    specific_details: str
+    client_problem_id: int = Field(foreign_key="client_problem.client_problem_id")
+
+    category_id: int = Field(foreign_key="intervention_category.category_id")
+    target_id: int = Field(foreign_key="intervention_target.target_id")
+    specific_details: str | None = None
+
+    date_performed: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, onupdate=lambda: datetime.now(timezone.utc))
+    )
+    deleted_at: datetime | None = None
 
     client_problem: ClientProblem = Relationship(back_populates="interventions")
+    category: InterventionCategory = Relationship()
     target: InterventionTarget = Relationship()

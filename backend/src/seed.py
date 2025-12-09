@@ -4,6 +4,9 @@ from .database import engine, create_db_and_tables
 from .models import (
     OmahaDomain,
     OmahaProblem,
+    Symptom,
+    OutcomePhase,
+    InterventionCategory,
     InterventionTarget,
     ModifierStatus,
     ModifierSubject,
@@ -51,6 +54,21 @@ def seed_database():
             ),
         ]
         session.add_all(problems)
+        session.commit()
+
+        # Find problems to add symptoms to
+        pain_problem = session.exec(select(OmahaProblem).where(OmahaProblem.name == "Pain")).one()
+        nutrition_problem = session.exec(select(OmahaProblem).where(OmahaProblem.name == "Nutrition")).one()
+
+        # Create Symptoms
+        symptoms = [
+            Symptom(problem_id=pain_problem.problem_id, description="Reports sharp, localized pain"),
+            Symptom(problem_id=pain_problem.problem_id, description="Grimaces or guards a body part"),
+            Symptom(problem_id=pain_problem.problem_id, description="Cries or moans"),
+            Symptom(problem_id=nutrition_problem.problem_id, description="Underweight/overweight"),
+            Symptom(problem_id=nutrition_problem.problem_id, description="Reports poor appetite"),
+        ]
+        session.add_all(symptoms)
 
         # Create Intervention Targets
         targets = [
@@ -77,6 +95,23 @@ def seed_database():
             ModifierSubject(name="Community"),
         ]
         session.add_all(subjects)
+
+        # Create Intervention Categories
+        categories = [
+            InterventionCategory(name="Teaching, Guidance, and Counseling"),
+            InterventionCategory(name="Treatments and Procedures"),
+            InterventionCategory(name="Case Management"),
+            InterventionCategory(name="Surveillance"),
+        ]
+        session.add_all(categories)
+
+        # Create Outcome Phases
+        phases = [
+            OutcomePhase(name="Admission"),
+            OutcomePhase(name="Interim"),
+            OutcomePhase(name="Discharge"),
+        ]
+        session.add_all(phases)
 
         session.commit()
         print("Seeding complete.")

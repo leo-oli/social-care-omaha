@@ -2,7 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
 from ..database import get_session
-from ..models import CareIntervention, ClientProblem, InterventionTarget
+from ..models import (
+    CareIntervention,
+    ClientProblem,
+    InterventionTarget,
+    InterventionCategory,
+)
 from ..schemas import CareInterventionCreate
 
 router = APIRouter(prefix="/interventions", tags=["interventions"])
@@ -17,6 +22,8 @@ def create_intervention(
         raise HTTPException(status_code=404, detail="Client Problem not found")
     if not session.get(InterventionTarget, intervention_data.target_id):
         raise HTTPException(status_code=404, detail="Intervention Target not found")
+    if not session.get(InterventionCategory, intervention_data.category_id):
+        raise HTTPException(status_code=404, detail="Intervention Category not found")
 
     intervention = CareIntervention.model_validate(intervention_data)
     session.add(intervention)
