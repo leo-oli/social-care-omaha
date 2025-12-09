@@ -10,18 +10,12 @@ from .routers import (
     interventions,
     static,
 )
-from .seed import seed_database
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Code to run on startup
-    print("INFO:     Calling lifespan startup")
     create_db_and_tables()
-    seed_database()
     yield
-    # Code to run on shutdown
-    print("INFO:     Calling lifespan shutdown")
 
 
 # Create FastAPI app
