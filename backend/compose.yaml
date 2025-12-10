@@ -1,11 +1,15 @@
 services:
     backend:
-        build: .
+        build:
+            context: .
+            target: dev  # prod
         ports:
             - 8000:8000
         volumes:
-            - omaha_db:/app/db
+            # - omaha_db:/app/db
+            - ./src:/app/src
+            - ./db:/app/db
 
-volumes:
-    omaha_db:
-        name: omaha_db_volume
+# volumes:
+#     omaha_db:
+#         name: omaha_db_volume
