@@ -1,0 +1,37 @@
+services:
+    groupoffice:
+        image: intermesh/groupoffice:25.0
+        container_name: groupoffice_go_container
+        ports:
+            - 8080:80
+        links:
+            - db
+        volumes:
+            - godata:/var/lib/groupoffice:cached
+            - goetc:/etc/groupoffice:cached
+        env_file:
+            - .env
+
+    db:
+        image: mariadb:11.1.2
+        container_name: groupoffice_db_container
+        ports:
+            - 3306:3306
+        env_file:
+            - .env
+        environment:
+            MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+            MARIADB_PASSWORD: ${MYSQL_PASSWORD}
+            MARIADB_DATABASE: ${MYSQL_DATABASE}
+            MARIADB_USER: ${MYSQL_USER}
+            MARIADB_AUTO_UPGRADE: 1
+        volumes:
+            - dbdata:/var/lib/mysql:cached
+
+volumes:
+    godata:
+        name: groupoffice_data_volume
+    goetc:
+        name: groupoffice_etc_volume
+    dbdata:
+        name: groupoffice_db_volume
