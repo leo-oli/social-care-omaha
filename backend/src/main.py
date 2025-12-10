@@ -26,3 +26,9 @@ app.include_router(clients.router, prefix="/api/v1")
 app.include_router(assessments.router, prefix="/api/v1")
 app.include_router(interventions.router, prefix="/api/v1")
 app.include_router(care_plans.router, prefix="/api/v1")
+
+
+# health check
+@app.get("/api/v1/health")
+async def health_check():
+    return {"status": "ok"}
