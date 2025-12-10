@@ -7,8 +7,8 @@ from ..models import (
     OmahaProblem,
     InterventionCategory,
     InterventionTarget,
-    ModifierStatus,
-    ModifierSubject,
+    ModifierType,
+    ModifierDomain,
 )
 
 router = APIRouter(prefix="/static", tags=["static"])
@@ -39,11 +39,11 @@ def get_intervention_categories(session: Session = Depends(get_session)):
     return session.exec(select(InterventionCategory)).all()
 
 
-@router.get("/modifier-statuses", response_model=list[ModifierStatus])
-def get_modifier_statuses(session: Session = Depends(get_session)):
-    return session.exec(select(ModifierStatus)).all()
+@router.get("/modifier-types", response_model=list[ModifierType])
+def get_modifier_types(session: Session = Depends(get_session)):
+    return session.exec(select(ModifierType)).all()
 
 
-@router.get("/modifier-subjects", response_model=list[ModifierSubject])
-def get_modifier_subjects(session: Session = Depends(get_session)):
-    return session.exec(select(ModifierSubject)).all()
+@router.get("/modifier-domains", response_model=list[ModifierDomain])
+def get_modifier_domains(session: Session = Depends(get_session)):
+    return session.exec(select(ModifierDomain)).all()

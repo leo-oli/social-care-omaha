@@ -11,7 +11,8 @@ from sqlmodel import Field, Relationship, SQLModel, Column, DateTime
 class OutcomePhase(SQLModel, table=True):
     __tablename__ = "outcome_phase"  # type: ignore
     phase_id: int | None = Field(default=None, primary_key=True)
-    name: str = Field(unique=True)
+    phase_name: str = Field(unique=True)
+    phase_description: str | None = None
 
 
 # ==========================================
@@ -22,7 +23,8 @@ class OutcomePhase(SQLModel, table=True):
 class OmahaDomain(SQLModel, table=True):
     __tablename__ = "omaha_domain"  # type: ignore
     domain_id: int | None = Field(default=None, primary_key=True)
-    name: str = Field(unique=True)
+    domain_name: str = Field(unique=True)
+    domain_description: str | None = None
 
     problems: list["OmahaProblem"] = Relationship(back_populates="domain")
 
@@ -31,7 +33,8 @@ class OmahaProblem(SQLModel, table=True):
     __tablename__ = "omaha_problem"  # type: ignore
     problem_id: int | None = Field(default=None, primary_key=True)
     domain_id: int = Field(foreign_key="omaha_domain.domain_id")
-    name: str
+    problem_name: str
+    problem_description: str | None = None
 
     domain: OmahaDomain = Relationship(back_populates="problems")
     possible_symptoms: list["Symptom"] = Relationship(back_populates="problem")
@@ -41,7 +44,7 @@ class Symptom(SQLModel, table=True):
     __tablename__ = "symptom"  # type: ignore
     symptom_id: int | None = Field(default=None, primary_key=True)
     problem_id: int = Field(foreign_key="omaha_problem.problem_id")
-    description: str
+    symptom_description: str | None = None
 
     problem: OmahaProblem = Relationship(back_populates="possible_symptoms")
 
@@ -49,25 +52,50 @@ class Symptom(SQLModel, table=True):
 class InterventionTarget(SQLModel, table=True):
     __tablename__ = "intervention_target"  # type: ignore
     target_id: int | None = Field(default=None, primary_key=True)
-    name: str = Field(unique=True)
+    target_name: str = Field(unique=True)
+    target_description: str | None = None
 
 
 class InterventionCategory(SQLModel, table=True):
     __tablename__ = "intervention_category"  # type: ignore
     category_id: int | None = Field(default=None, primary_key=True)
-    name: str = Field(unique=True)
+    category_name: str = Field(unique=True)
+    category_description: str | None = None
 
 
-class ModifierStatus(SQLModel, table=True):
-    __tablename__ = "modifier_status"  # type: ignore
-    status_id: int | None = Field(default=None, primary_key=True)
-    name: str = Field(unique=True)
+class ModifierDomain(SQLModel, table=True):
+    __tablename__ = "modifier_domain"  # type: ignore
+    modifier_domain_id: int | None = Field(default=None, primary_key=True)
+    modifier_domain_name: str = Field(unique=True)
+    modifier_domain_description: str | None = None
 
 
-class ModifierSubject(SQLModel, table=True):
-    __tablename__ = "modifier_subject"  # type: ignore
-    subject_id: int | None = Field(default=None, primary_key=True)
-    name: str = Field(unique=True)
+class ModifierType(SQLModel, table=True):
+    __tablename__ = "modifier_type"  # type: ignore
+    modifier_type_id: int | None = Field(default=None, primary_key=True)
+    modifier_type_name: str = Field(unique=True)
+    modifier_type_description: str | None = None
+
+
+class OutcomeRatingStatus(SQLModel, table=True):
+    __tablename__ = "outcome_rating_status"  # type: ignore
+    rating_status_id: int | None = Field(default=None, primary_key=True)
+    rating_status_label: str
+    rating_status_description: str | None = None
+
+
+class OutcomeRatingKnowledge(SQLModel, table=True):
+    __tablename__ = "outcome_rating_knowledge"  # type: ignore
+    rating_knowledge_id: int | None = Field(default=None, primary_key=True)
+    rating_knowledge_label: str
+    rating_knowledge_description: str | None = None
+
+
+class OutcomeRatingBehavior(SQLModel, table=True):
+    __tablename__ = "outcome_rating_behavior"  # type: ignore
+    rating_behavior_id: int | None = Field(default=None, primary_key=True)
+    rating_behavior_label: str
+    rating_behavior_description: str | None = None
 
 
 # ==========================================
@@ -77,7 +105,7 @@ class ModifierSubject(SQLModel, table=True):
 
 class ClientPII(SQLModel, table=True):
     __tablename__ = "client_pii"  # type: ignore
-    id: int | None = Field(default=None, primary_key=True)
+    client_pii_id: int | None = Field(default=None, primary_key=True)
     client_id: int = Field(foreign_key="client.client_id", unique=True)
     first_name: str  # Note: Handle encryption in application logic
     last_name: str  # Note: Handle encryption in application logic
@@ -113,7 +141,8 @@ class Client(SQLModel, table=True):
     is_active: bool = Field(default=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime | None = Field(
-        default=None, sa_column=Column(DateTime, onupdate=lambda: datetime.now(timezone.utc))
+        default=None,
+        sa_column=Column(DateTime, onupdate=lambda: datetime.now(timezone.utc)),
     )
     deleted_at: datetime | None = None
 
@@ -127,21 +156,22 @@ class ClientProblem(SQLModel, table=True):
     client_problem_id: int | None = Field(default=None, primary_key=True)
     client_id: int = Field(foreign_key="client.client_id")
     problem_id: int = Field(foreign_key="omaha_problem.problem_id")
-    status_id: int = Field(foreign_key="modifier_status.status_id")
-    subject_id: int = Field(foreign_key="modifier_subject.subject_id")
+    modifier_domain_id: int = Field(foreign_key="modifier_domain.modifier_domain_id")
+    modifier_type_id: int = Field(foreign_key="modifier_type.modifier_type_id")
     active: bool = Field(default=True)
 
     # Audit timestamps
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime | None = Field(
-        default=None, sa_column=Column(DateTime, onupdate=lambda: datetime.now(timezone.utc))
+        default=None,
+        sa_column=Column(DateTime, onupdate=lambda: datetime.now(timezone.utc)),
     )
     deleted_at: datetime | None = None
 
     client: Client = Relationship(back_populates="problems")
     problem: OmahaProblem = Relationship()
-    modifier_status: ModifierStatus = Relationship()
-    modifier_subject: ModifierSubject = Relationship()
+    modifier_domain: ModifierDomain = Relationship()
+    modifier_type: ModifierType = Relationship()
 
     # Relationships to child tables
     selected_symptoms: list["ClientProblemSymptom"] = Relationship(
@@ -155,13 +185,14 @@ class ClientProblem(SQLModel, table=True):
 
 class ClientProblemSymptom(SQLModel, table=True):
     __tablename__ = "client_problem_symptom"  # type: ignore
-    client_pii_id: int | None = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     client_problem_id: int = Field(foreign_key="client_problem.client_problem_id")
     symptom_id: int = Field(foreign_key="symptom.symptom_id")
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime | None = Field(
-        default=None, sa_column=Column(DateTime, onupdate=lambda: datetime.now(timezone.utc))
+        default=None,
+        sa_column=Column(DateTime, onupdate=lambda: datetime.now(timezone.utc)),
     )
     deleted_at: datetime | None = None
 
@@ -175,19 +206,27 @@ class OutcomeScore(SQLModel, table=True):
     client_problem_id: int = Field(foreign_key="client_problem.client_problem_id")
 
     phase_id: int = Field(foreign_key="outcome_phase.phase_id")
-    rating_knowledge: int
-    rating_behavior: int
-    rating_status: int
+    rating_status_id: int = Field(foreign_key="outcome_rating_status.rating_status_id")
+    rating_knowledge_id: int = Field(
+        foreign_key="outcome_rating_knowledge.rating_knowledge_id"
+    )
+    rating_behavior_id: int = Field(
+        foreign_key="outcome_rating_behavior.rating_behavior_id"
+    )
 
     date_recorded: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime | None = Field(
-        default=None, sa_column=Column(DateTime, onupdate=lambda: datetime.now(timezone.utc))
+        default=None,
+        sa_column=Column(DateTime, onupdate=lambda: datetime.now(timezone.utc)),
     )
     deleted_at: datetime | None = None
 
     client_problem: ClientProblem = Relationship(back_populates="scores")
     phase: OutcomePhase = Relationship()
+    status_rating: OutcomeRatingStatus = Relationship()
+    knowledge_rating: OutcomeRatingKnowledge = Relationship()
+    behavior_rating: OutcomeRatingBehavior = Relationship()
 
 
 class CareIntervention(SQLModel, table=True):
@@ -202,7 +241,8 @@ class CareIntervention(SQLModel, table=True):
     date_performed: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime | None = Field(
-        default=None, sa_column=Column(DateTime, onupdate=lambda: datetime.now(timezone.utc))
+        default=None,
+        sa_column=Column(DateTime, onupdate=lambda: datetime.now(timezone.utc)),
     )
     deleted_at: datetime | None = None
 

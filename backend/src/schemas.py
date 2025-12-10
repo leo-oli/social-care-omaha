@@ -7,10 +7,13 @@ from .models import (
     Client,
     InterventionTarget,
     InterventionCategory,
-    ModifierStatus,
-    ModifierSubject,
+    ModifierDomain,
+    ModifierType,
     OmahaProblem,
     Symptom,
+    OutcomeRatingStatus,
+    OutcomeRatingKnowledge,
+    OutcomeRatingBehavior,
 )
 
 
@@ -23,8 +26,8 @@ class ClientCreate(SQLModel):
 class ClientProblemCreate(SQLModel):
     client_id: int
     problem_id: int
-    status_id: int
-    subject_id: int
+    modifier_domain_id: int
+    modifier_type_id: int
     symptom_ids: list[int] | None = None
     rating_knowledge: int | None = None
     rating_behavior: int | None = None
@@ -41,9 +44,9 @@ class CareInterventionCreate(SQLModel):
 # Response Models
 class OutcomeScoreRead(SQLModel):
     phase: OutcomePhase
-    rating_knowledge: int
-    rating_behavior: int
-    rating_status: int
+    status_rating: OutcomeRatingStatus
+    knowledge_rating: OutcomeRatingKnowledge
+    behavior_rating: OutcomeRatingBehavior
     date_recorded: datetime
 
 
@@ -61,8 +64,8 @@ class CareInterventionRead(SQLModel):
 class ClientProblemRead(SQLModel):
     client_problem_id: int
     problem: OmahaProblem
-    modifier_status: ModifierStatus
-    modifier_subject: ModifierSubject
+    modifier_domain: ModifierDomain
+    modifier_type: ModifierType
     active: bool
     selected_symptoms: list[ClientProblemSymptomRead] = []
     latest_score: OutcomeScoreRead | None = None

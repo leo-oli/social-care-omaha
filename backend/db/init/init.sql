@@ -18,8 +18,8 @@ DROP TABLE IF EXISTS client_pii;
 DROP TABLE IF EXISTS client;
 DROP TABLE IF EXISTS outcome_phase;
 DROP TABLE IF EXISTS intervention_category;
-DROP TABLE IF EXISTS modifier_subject;
-DROP TABLE IF EXISTS modifier_status;
+DROP TABLE IF EXISTS modifier_type;
+DROP TABLE IF EXISTS modifier_domain;
 DROP TABLE IF EXISTS intervention_target;
 DROP TABLE IF EXISTS symptom;
 DROP TABLE IF EXISTS omaha_problem;
@@ -35,46 +35,72 @@ DROP TABLE IF EXISTS omaha_domain;
 
 CREATE TABLE omaha_domain (
     domain_id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE
+    domain_name TEXT NOT NULL UNIQUE,
+    domain_description TEXT
 );
 
 CREATE TABLE omaha_problem (
     problem_id INTEGER PRIMARY KEY,
     domain_id INTEGER NOT NULL,
-    name TEXT NOT NULL,
+    problem_name TEXT NOT NULL,
+    problem_description TEXT,
     FOREIGN KEY (domain_id) REFERENCES omaha_domain(domain_id) ON DELETE RESTRICT
 );
 
 CREATE TABLE symptom (
     symptom_id INTEGER PRIMARY KEY AUTOINCREMENT,
     problem_id INTEGER NOT NULL,
-    description TEXT NOT NULL,
-    FOREIGN KEY (problem_id) REFERENCES omaha_problem(problem_id) ON DELETE CASCADE
+    symptom_description TEXT NOT NULL,
+    FOREIGN KEY (problem_id) REFERENCES omaha_problem(problem_id) ON DELETE RESTRICT,
+    UNIQUE(problem_id, symptom_description)
 );
 
 CREATE TABLE intervention_target (
-    target_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE
+    target_id INTEGER PRIMARY KEY,
+    target_name TEXT NOT NULL UNIQUE,
+    target_description TEXT
 );
 
-CREATE TABLE modifier_status (
-    status_id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE 
+CREATE TABLE modifier_domain (
+    modifier_domain_id INTEGER PRIMARY KEY,
+    modifier_domain_name TEXT NOT NULL UNIQUE,
+    modifier_domain_description TEXT
 );
 
-CREATE TABLE modifier_subject (
-    subject_id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE 
+CREATE TABLE modifier_type (
+    modifier_type_id INTEGER PRIMARY KEY,
+    modifier_type_name TEXT NOT NULL UNIQUE,
+    modifier_type_description TEXT
 );
 
 CREATE TABLE intervention_category (
     category_id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE 
+    category_name TEXT NOT NULL UNIQUE,
+    category_description TEXT
 );
 
 CREATE TABLE outcome_phase (
-    phase_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE
+    phase_id INTEGER PRIMARY KEY,
+    phase_name TEXT NOT NULL UNIQUE,
+    phase_description TEXT
+);
+
+CREATE TABLE outcome_rating_status (
+    rating_status_id INTEGER PRIMARY KEY,
+    rating_status_label TEXT NOT NULL,
+    rating_status_description TEXT
+);
+
+CREATE TABLE outcome_rating_knowledge (
+    rating_knowledge_id INTEGER PRIMARY KEY,
+    rating_knowledge_label TEXT NOT NULL,
+    rating_knowledge_description TEXT
+);
+
+CREATE TABLE outcome_rating_behavior (
+    rating_behavior_id INTEGER PRIMARY KEY,
+    rating_behavior_label TEXT NOT NULL,
+    rating_behavior_description TEXT
 );
 
 -- ----------------------------------------------------------------------------
@@ -122,21 +148,21 @@ CREATE TABLE client_problem (
     client_problem_id INTEGER PRIMARY KEY AUTOINCREMENT,
     client_id INTEGER NOT NULL,
     problem_id INTEGER NOT NULL,
-    status_id INTEGER NOT NULL, 
-    subject_id INTEGER NOT NULL,
+    modifier_domain_id INTEGER NOT NULL, 
+    modifier_type_id INTEGER NOT NULL,
     active INTEGER DEFAULT 1, 
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     deleted_at DATETIME DEFAULT NULL,
     FOREIGN KEY (client_id) REFERENCES client(client_id) ON DELETE CASCADE,
     FOREIGN KEY (problem_id) REFERENCES omaha_problem(problem_id),
-    FOREIGN KEY (status_id) REFERENCES modifier_status(status_id),
-    FOREIGN KEY (subject_id) REFERENCES modifier_subject(subject_id)
+    FOREIGN KEY (modifier_domain_id) REFERENCES modifier_domain(modifier_domain_id),
+    FOREIGN KEY (modifier_type_id) REFERENCES modifier_type(modifier_type_id)
 );
 
 -- Selected Symptoms (For 'Actual' problems)
 CREATE TABLE client_problem_symptom (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_problem_symptom_id INTEGER PRIMARY KEY AUTOINCREMENT,
     client_problem_id INTEGER NOT NULL,
     symptom_id INTEGER NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -151,15 +177,18 @@ CREATE TABLE outcome_score (
     score_id INTEGER PRIMARY KEY AUTOINCREMENT,
     client_problem_id INTEGER NOT NULL,
     phase_id INTEGER NOT NULL,
-    rating_knowledge INTEGER CHECK(rating_knowledge BETWEEN 1 AND 5),
-    rating_behavior INTEGER CHECK(rating_behavior BETWEEN 1 AND 5),
-    rating_status INTEGER CHECK(rating_status BETWEEN 1 AND 5),
+    rating_status_id INTEGER NOT NULL,
+    rating_knowledge_id INTEGER NOT NULL,
+    rating_behavior_id INTEGER NOT NULL,
     date_recorded DATETIME DEFAULT CURRENT_TIMESTAMP, 
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,    
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,    
     deleted_at DATETIME DEFAULT NULL,
     FOREIGN KEY (client_problem_id) REFERENCES client_problem(client_problem_id) ON DELETE CASCADE,
-    FOREIGN KEY (phase_id) REFERENCES outcome_phase(phase_id)
+    FOREIGN KEY (phase_id) REFERENCES outcome_phase(phase_id),
+    FOREIGN KEY (rating_status_id) REFERENCES outcome_rating_status(rating_status_id),
+    FOREIGN KEY (rating_knowledge_id) REFERENCES outcome_rating_knowledge(rating_knowledge_id),
+    FOREIGN KEY (rating_behavior_id) REFERENCES outcome_rating_behavior(rating_behavior_id)
 );
 
 -- Care Interventions
@@ -192,7 +221,7 @@ CREATE TRIGGER idx_client_problem_updated AFTER UPDATE ON client_problem BEGIN
     UPDATE client_problem SET updated_at = CURRENT_TIMESTAMP WHERE client_problem_id = OLD.client_problem_id;
 END;
 CREATE TRIGGER idx_cp_symptom_updated AFTER UPDATE ON client_problem_symptom BEGIN
-    UPDATE client_problem_symptom SET updated_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
+    UPDATE client_problem_symptom SET updated_at = CURRENT_TIMESTAMP WHERE client_problem_symptom_id = OLD.client_problem_symptom_id;
 END;
 CREATE TRIGGER idx_outcome_score_updated AFTER UPDATE ON outcome_score BEGIN
     UPDATE outcome_score SET updated_at = CURRENT_TIMESTAMP WHERE score_id = OLD.score_id;
@@ -206,212 +235,700 @@ END;
 -- 3. DATA SEEDING (THE OMAHA TAXONOMY)
 -- ============================================================================
 
--- 3.1 DOMAINS (Exactly 4)
-INSERT INTO omaha_domain (domain_id, name) VALUES 
-(1, 'Environmental'),
-(2, 'Psychosocial'),
-(3, 'Physiological'),
-(4, 'Health-related Behaviors');
+-- 3.1 DOMAINS
+INSERT INTO omaha_domain (domain_id, domain_name, domain_description) VALUES
+(1, 'Environmental', 'Material resources and physical surroundings both inside and outside the living area, neighborhood, and broader community.'),
+(2, 'Psychosocial', 'Patterns of behavior, emotion, communication, relationships, and development.'),
+(3, 'Physiological', 'Functions and processes that maintain life.'),
+(4, 'Health-related Behaviors', 'Patterns of activity that maintain or promote wellness, promote recovery, and decrease the risk of disease.');
 
--- 3.2 PROBLEMS (Exactly 42)
+-- 3.2 PROBLEMS
 -- Domain 1: Environmental
-INSERT INTO omaha_problem (problem_id, domain_id, name) VALUES 
-(1, 1, 'Income'),
-(2, 1, 'Sanitation'),
-(3, 1, 'Residence'),
-(4, 1, 'Neighborhood/workplace safety');
+INSERT INTO omaha_problem (problem_id, domain_id, problem_name, problem_description) VALUES
+(1, 1, 'Income', 'Money from wages, pensions, subsidies, interest, dividends, or other sources available for living and health care expenses'),
+(2, 1, 'Sanitation', 'Environmental cleanliness and precautions against infection and disease'),
+(3, 1, 'Residence', 'Living area'),
+(4, 1, 'Neighborhood/workplace safety', 'Freedom from illness, injury, or loss in the community or place of employment');
 
 -- Domain 2: Psychosocial
-INSERT INTO omaha_problem (problem_id, domain_id, name) VALUES 
-(5, 2, 'Communication with community resources'),
-(6, 2, 'Social contact'),
-(7, 2, 'Role change'),
-(8, 2, 'Interpersonal relationship'),
-(9, 2, 'Spirituality'),
-(10, 2, 'Grief'),
-(11, 2, 'Mental health'),
-(12, 2, 'Sexuality'),
-(13, 2, 'Caretaking/parenting'),
-(14, 2, 'Neglect'),
-(15, 2, 'Abuse'),
-(16, 2, 'Growth and development');
+INSERT INTO omaha_problem (problem_id, domain_id, problem_name, problem_description) VALUES
+(5, 2, 'Communication with community resources', 'Interaction between the individual/family/community and social service organizations, schools, and business in regard to services, information, and goods/supplies'),
+(6, 2, 'Social contact', 'Interaction between the individual/family/community and others outside the immediate living area'),
+(7, 2, 'Role change', 'Additions to or removal of a set of expected behavioral characteristics'),
+(8, 2, 'Interpersonal relationship', 'Associations or bonds between the individual/family/community and others'),
+(9, 2, 'Spirituality', 'Beliefs and practices that involve faith, religion, values, the spirit and/or soul'),
+(10, 2, 'Grief', 'Suffering and distress associated with loss'),
+(11, 2, 'Mental health', 'Development and use of mental/emotional abilities to adjust to life situations, interact with others, and engage in activities'),
+(12, 2, 'Sexuality', 'Attitudes, feelings, and behaviors related to intimacy and sexual activity'),
+(13, 2, 'Caretaking/parenting', 'Providing support, nurturance, stimulation, and physical care for dependent child or adult'),
+(14, 2, 'Neglect', 'Child or adult deprived of minimally accepted standards of food, shelter, clothing, or care'),
+(15, 2, 'Abuse', 'Child or adult subjected to non-accidental physical, emotional, or sexual violence or injury'),
+(16, 2, 'Growth and development', 'Progressive physical, emotional, and social maturation along the age continuum from birth to death');
 
 -- Domain 3: Physiological
-INSERT INTO omaha_problem (problem_id, domain_id, name) VALUES 
-(17, 3, 'Hearing'),
-(18, 3, 'Vision'),
-(19, 3, 'Speech and language'),
-(20, 3, 'Oral health'),
-(21, 3, 'Cognition'),
-(22, 3, 'Pain'),
-(23, 3, 'Consciousness'),
-(24, 3, 'Integument'),
-(25, 3, 'Neuro-musculo-skeletal function'),
-(26, 3, 'Respiration'),
-(27, 3, 'Circulation'),
-(28, 3, 'Digestion-hydration'),
-(29, 3, 'Bowel function'),
-(30, 3, 'Genito-urinary function'),
-(31, 3, 'Pregnancy'),
-(32, 3, 'Postpartum'),
-(33, 3, 'Communicable/infectious condition');
+INSERT INTO omaha_problem (problem_id, domain_id, problem_name, problem_description) VALUES
+(17, 3, 'Hearing', 'Perception of sounds by the ears'),
+(18, 3, 'Vision', 'Act or power of sensing with the eyes'),
+(19, 3, 'Speech and language', 'Use of articulated vocal sounds, symbols, signs, or gestures for communication'),
+(20, 3, 'Cognition', 'Ability to think and use information'),
+(21, 3, 'Pain', 'Unpleasant sensory and emotional experience associated with actual or potential tissue damage'),
+(22, 3, 'Consciousness', 'Awareness of and responsiveness to stimuli and the surroundings'),
+(23, 3, 'Skin', 'Natural covering of the body'),
+(24, 3, 'Neuro-musculo-skeletal function', 'Ability of nerves, muscles, and bones to perform or coordinate specific movement, sensation, or regulation'),
+(25, 3, 'Respiration', 'Inhaling and exhaling air into the body and exchanging oxygen'),
+(26, 3, 'Circulation', 'Pumping blood in adequate amounts and pressure throughout the body'),
+(27, 3, 'Digestion-hydration', 'Process of converting food into forms that can be absorbed and assimilated, and maintaining fluid balance'),
+(28, 3, 'Bowel function', 'Transporting food through the gastrointestinal tract to eliminate wastes'),
+(29, 3, 'Oral health', 'Condition of the mouth and gums and the number, type, and arrangement of the teeth'),
+(30, 3, 'Urinary function', 'Production and excretion of urine'),
+(31, 3, 'Reproductive function', 'Condition of the genital organs and breasts and the ability to reproduce'),
+(32, 3, 'Pregnancy', 'Period from conception to childbirth'),
+(33, 3, 'Postpartum', 'Six-week period following childbirth'),
+(34, 3, 'Communicable/infectious condition', 'State in which organisms invade/infest and produce superficial or systemic illness with the potential for spreading or transmission');
 
 -- Domain 4: Health-related Behaviors
-INSERT INTO omaha_problem (problem_id, domain_id, name) VALUES 
-(34, 4, 'Nutrition'),
-(35, 4, 'Sleep and rest patterns'),
-(36, 4, 'Physical activity'),
-(37, 4, 'Personal care'),
-(38, 4, 'Substance use'),
-(39, 4, 'Family planning'),
-(40, 4, 'Health care supervision'),
-(41, 4, 'Medication regimen'),
-(42, 4, 'Technical procedure');
+INSERT INTO omaha_problem (problem_id, domain_id, problem_name, problem_description) VALUES
+(35, 4, 'Nutrition', 'Select, consume, and use food and fluid for energy, maintenance, growth, and health'),
+(36, 4, 'Sleep and rest patterns', 'Periods of suspended motor and sensory activity and periods of inactivity, repose, or mental calm'),
+(37, 4, 'Physical activity', 'State or quality of body movements during daily living'),
+(38, 4, 'Personal care', 'Management of personal cleanliness and dressing'),
+(39, 4, 'Substance use', 'Consumption of medicines, recreational drugs, or other materials likely to cause mood changes and/or psychological/physical dependence, illness, and disease'),
+(40, 4, 'Family planning', 'Practices designed to plan and space pregnancy within the context of values, attitudes, and beliefs'),
+(41, 4, 'Health care supervision', 'Management of the health care treatment plan by health care providers'),
+(42, 4, 'Medication regimen', 'Use or application of over-the-counter and prescribed/recommended medications and infusions to meet guidelines for therapeutic action, safety, and schedule');
+
 
 -- 3.3 SYMPTOMS (Standard Signs/Symptoms for Key Problems)
--- Note: This matches your input list.
-INSERT INTO symptom (problem_id, description) VALUES 
-(1, 'Low/no income'), (1, 'Difficulty buying essentials'), (1, 'Difficulty paying bills'), (1, 'Able to buy only essentials'),
-(2, 'Soiled living area'), (2, 'Inadequate food storage/disposal'), (2, 'Insects/rodents'), (2, 'Foul odors'), (2, 'Inadequate water supply'), (2, 'Inadequate sewage disposal'),
-(3, 'Structurally unsound'), (3, 'Inadequate heating/cooling'), (3, 'Steep stairs/no handrails'), (3, 'Cluttered living space'), (3, 'Unsafe mats/rugs'), (3, 'Inadequate lighting'), (3, 'Unsafe lead content'), (3, 'Homeless'),
-(4, 'High crime rate'), (4, 'High pollution level'), (4, 'Uncontrolled animals'), (4, 'Physical hazards'), (4, 'Unsafe play area'),
-(5, 'Unfamiliar with options/procedures'), (5, 'Difficulty understanding roles/regulations'), (5, 'Unable to communicate concerns'), (5, 'Dissatisfaction with services'), (5, 'Language barrier'), (5, 'Inadequate transportation'),
-(6, 'Limited social contact'), (6, 'Minimal outside stimulation'), (6, 'Social isolation'),
-(7, 'Inability to assume new role'), (7, 'Loss of previous role'), (7, 'Role conflict'), (7, 'Prolonged grief/guilt'),
-(8, 'Difficulty establishing/maintaining relationships'), (8, 'Minimal shared activities'), (8, 'Inappropriate behavior'), (8, 'Domestic violence'),
-(9, 'Spiritual distress'), (9, 'Disruption of religious practice'), (9, 'Value/belief conflict'),
-(10, 'Difficulty coping with loss'), (10, 'Denial'), (10, 'Anger'), (10, 'Despair'), (10, 'Guilt'),
-(11, 'Anxiety'), (11, 'Depression'), (11, 'Somatic complaints'), (11, 'Difficulty managing stress'), (11, 'Confusion'), (11, 'Flat affect'), (11, 'Agitation'), (11, 'Hallucinations/Delusions'),
-(12, 'Sexual functioning difficulty'), (12, 'Dissatisfaction with sexual relationship'), (12, 'Inappropriate sexual behavior'),
-(13, 'Difficulty providing physical care'), (13, 'Difficulty providing emotional support'), (13, 'Expectations incongruent with stage of growth'), (13, 'Dissatisfaction with responsibility'), (13, 'Neglectful/abusive'),
-(14, 'Lack of physical necessities'), (14, 'Lack of emotional support'), (14, 'Lack of supervision'), (14, 'Evidence of physical neglect'),
-(15, 'Physical abuse'), (15, 'Emotional abuse'), (15, 'Sexual abuse'), (15, 'Financial exploitation'),
-(16, 'Abnormal weight/height'), (16, 'Failure to thrive'), (16, 'Developmental delay'), (16, 'Precocious development'),
-(17, 'Difficulty hearing normal speech'), (17, 'Difficulty hearing distinct sounds'), (17, 'Use of hearing aid'), (17, 'Tinnitus'),
-(18, 'Difficulty seeing near/far'), (18, 'Blurring'), (18, 'Double vision'), (18, 'Tearing/discharge'), (18, 'Blindness'),
-(19, 'Difficulty expressing ideas'), (19, 'Difficulty understanding speech'), (19, 'Inappropriate speech'), (19, 'Slurred speech'), (19, 'Aphasia'),
-(20, 'Toothache/pain'), (20, 'Decayed/missing teeth'), (20, 'Inflamed/bleeding gums'), (20, 'Ill-fitting dentures'), (20, 'Halitosis'),
-(21, 'Memory loss'), (21, 'Disorientation'), (21, 'Poor judgment'), (21, 'Inability to reason'), (21, 'Short attention span'),
-(22, 'Reports pain'), (22, 'Guarding behavior'), (22, 'Restlessness'), (22, 'Facial grimacing'), (22, 'Pallor/sweating'),
-(23, 'Lethargic'), (23, 'Unresponsive'), (23, 'Comatose'), (23, 'Seizures'),
-(24, 'Lesion/wound'), (24, 'Rash'), (24, 'Dryness/itching'), (24, 'Bruising'), (24, 'Inflammation'), (24, 'Drainage'),
-(25, 'Limited range of motion'), (25, 'Weakness'), (25, 'Tremors'), (25, 'Atrophy'), (25, 'Poor coordination'), (25, 'Poor balance'), (25, 'Gait deviation'),
-(26, 'Abnormal breath sounds'), (26, 'Shortness of breath'), (26, 'Cough'), (26, 'Cyanosis'), (26, 'Abnormal rate/rhythm'), (26, 'Oxygen dependence'),
-(27, 'Edema'), (27, 'Cramping/pain'), (27, 'Temperature change in extremities'), (27, 'Discoloration'), (27, 'Varicosities'), (27, 'Abnormal pulse/BP'), (27, 'Angina'),
-(28, 'Nausea/vomiting'), (28, 'Heartburn'), (28, 'Dysphagia'), (28, 'Dehydration'), (28, 'Anorexia'), (28, 'Jaundice'), (28, 'Ascites'),
-(29, 'Constipation'), (29, 'Diarrhea'), (29, 'Incontinence'), (29, 'Blood in stool'), (29, 'Painful defecation'), (29, 'Ostomy'),
-(30, 'Incontinence'), (30, 'Urgency/frequency'), (30, 'Burning/pain'), (30, 'Retention'), (30, 'Hematuria'), (30, 'Discharge'),
-(31, 'Lochia abnormality'), (31, 'Fundal abnormality'), (31, 'Breast engorgement'), (31, 'Pain/tenderness'), (31, 'Infection signs'),
-(32, 'Fever'), (32, 'Positive culture/test'), (32, 'Exposure to infectious disease'), (32, 'Drainage/secretion'),
-(33, 'Obesity'), (33, 'Underweight'), (33, 'Unbalanced diet'), (33, 'Excessive intake'), (33, 'Inadequate intake'),
-(34, 'Insomnia'), (34, 'Nightmares'), (34, 'Sleep apnea'), (34, 'Fatigue'), (34, 'Frequent waking'),
-(35, 'Sedentary lifestyle'), (35, 'Excessive activity'), (35, 'Inappropriate type of activity'), (35, 'Lack of exercise routine'),
-(36, 'Unable to bathe self'), (36, 'Unable to dress self'), (36, 'Unable to groom self'), (36, 'Poor hygiene'), (36, 'Unable to feed self'),
-(37, 'Alcohol abuse'), (37, 'Drug abuse'), (37, 'Tobacco use'), (37, 'Dependence'), (37, 'Withdrawal symptoms'),
-(38, 'Unwanted pregnancy'), (38, 'Infertility'), (38, 'Lack of contraception knowledge'), (38, 'Improper use of contraception'),
-(39, 'Routine checkups missed'), (39, 'Immunizations incomplete'), (39, 'Failure to follow treatment plan'), (39, 'Unable to navigate health system'),
-(40, 'Failure to take meds'), (40, 'Taking incorrect dose'), (40, 'Taking expired meds'), (40, 'Storing meds improperly'), (40, 'Side effects'),
-(41, 'Difficulty performing procedure'), (41, 'Improper technique'), (41, 'Fear of procedure'), (41, 'Refusal to perform');
+-- 1. INCOME
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(1, 'Low/no income'),
+(1, 'Uninsured medical expenses'),
+(1, 'Difficulty with money management'),
+(1, 'Able to buy only necessities'),
+(1, 'Difficulty buying necessities'),
+(1, 'Other');
+
+-- 2. SANITATION
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(2, 'Soiled living area'),
+(2, 'Inadequate food storage/disposal'),
+(2, 'Insect/rodents'),
+(2, 'Foul odor'),
+(2, 'Inadequate water supply'),
+(2, 'Inadequate sewage disposal'),
+(2, 'Inadequate laundry facilities'),
+(2, 'Allergens'),
+(2, 'Infectious/contaminating agents'),
+(2, 'Excessive pets'),
+(2, 'Other'),
+(2, 'Presence of mold');
+
+-- 3. RESIDENCE
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(3, 'Structurally unsound'),
+(3, 'Inadequate heating/cooling'),
+(3, 'Steep/unsafe stairs'),
+(3, 'Inadequate/obstructed exits/entries'),
+(3, 'Cluttered living space'),
+(3, 'Unsafe storage of dangerous objects/substances'),
+(3, 'Unsafe mats/throw rugs'),
+(3, 'Inadequate safety devices'),
+(3, 'Presence of lead-based paint'),
+(3, 'Unsafe appliances/equipment'),
+(3, 'Inadequate/crowded living space'),
+(3, 'Exposed wiring'),
+(3, 'Structural barriers'),
+(3, 'Homeless'),
+(3, 'Other');
+
+-- 4. NEIGHBORHOOD/WORKPLACE SAFETY
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(4, 'High crime rate'),
+(4, 'High pollution level'),
+(4, 'Uncontrolled/dangerous/infected animals'),
+(4, 'Inadequate/unsafe play/exercise areas'),
+(4, 'Inadequate space/resources to foster health'),
+(4, 'Threats/reports of violence'),
+(4, 'Physical hazards'),
+(4, 'Vehicle/traffic hazards'),
+(4, 'Chemical hazards'),
+(4, 'Radiological hazards'),
+(4, 'Other');
+
+-- 5. COMMUNICATION WITH COMMUNITY RESOURCES
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(5, 'Unfamiliar with options/procedures for obtaining services'),
+(5, 'Difficulty understanding roles/regulations of service providers'),
+(5, 'Unable to communicate concerns to provider'),
+(5, 'Inadequate/unavailable resources'),
+(5, 'Language barrier'),
+(5, 'Cultural barrier'),
+(5, 'Educational barrier'),
+(5, 'Transportation barrier'),
+(5, 'Limited access to care/services/goods'),
+(5, 'Unable to use/has inadequate communication devices/equipment'),
+(5, 'Dissatisfaction with services'),
+(5, 'Other');
+
+-- 6. SOCIAL CONTACT
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(6, 'Limited social contact'),
+(6, 'Uses health care provider for social contact'),
+(6, 'Minimal outside stimulation/leisure time activities'),
+(6, 'Other');
+
+-- 7. ROLE CHANGE
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(7, 'Involuntary role reversal'),
+(7, 'Assumes new role'),
+(7, 'Loses previous role'),
+(7, 'Other');
+
+-- 8. INTERPERSONAL RELATIONSHIP
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(8, 'Difficulty establishing/maintaining relationships'),
+(8, 'Minimal shared activities'),
+(8, 'Incongruent values/goals/expectations/schedules'),
+(8, 'Inadequate interpersonal communication skills'),
+(8, 'Prolonged, unrevealed tension'),
+(8, 'Inappropriate suspicion/manipulation/control'),
+(8, 'Physically/emotionally abusive to partner'),
+(8, 'Difficulty problem solving without conflict'),
+(8, 'Other');
+
+-- 9. SPIRITUALITY
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(9, 'Expresses spiritual concerns'),
+(9, 'Disrupted spiritual rituals'),
+(9, 'Disrupted spiritual trust'),
+(9, 'Conflicting spiritual beliefs and medical/health care regimen'),
+(9, 'Other');
+
+-- 10. GRIEF
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(10, 'Fails to recognize stages of grief/process of healing'),
+(10, 'Difficulty coping with grief responses'),
+(10, 'Difficulty expressing grief responses'),
+(10, 'Conflicting stages of grief among individuals/families'),
+(10, 'Other');
+
+-- 11. MENTAL HEALTH
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(11, 'Sadness/hopelessness/decreased self-esteem'),
+(11, 'Apprehension/undefined fear'),
+(11, 'Loss of interest/involvement in activities/self-care'),
+(11, 'Narrowed to scattered attention/focus'),
+(11, 'Flat affect'),
+(11, 'Irritable/agitated/aggressive'),
+(11, 'Purposeless/compulsive activity'),
+(11, 'Difficulty managing anger'),
+(11, 'Difficulty managing stress'),
+(11, 'Somatic complaints/fatigue'),
+(11, 'Delusions'),
+(11, 'Hallucinations/illusions'),
+(11, 'Expresses suicidal/homicidal thoughts'),
+(11, 'Attempts suicide/homicide'),
+(11, 'Self-mutilation'),
+(11, 'Mood swings'),
+(11, 'Flash-backs'),
+(11, 'Other');
+
+-- 12. SEXUALITY
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(12, 'Difficulty recognizing consequences of sexual behavior'),
+(12, 'Sexual identity confusion'),
+(12, 'Sexual value confusion'),
+(12, 'Dissatisfied with sexual relationships'),
+(12, 'Unsafe sexual practices'),
+(12, 'Sexual acting out/provocative behaviors/harassment'),
+(12, 'Sexual perpetration/assault'),
+(12, 'Other'),
+(12, 'Difficulty expressing intimacy');
+
+-- 13. CARETAKING/PARENTING
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(13, 'Difficulty providing physical care/safety'),
+(13, 'Difficulty providing cognitive learning experiences and activities'),
+(13, 'Difficulty providing preventive and therapeutic health care'),
+(13, 'Expectations incongruent with stage of growth and development'),
+(13, 'Dissatisfaction/difficulty with responsibilities'),
+(13, 'Difficulty interpreting or responding to verbal/nonverbal communication'),
+(13, 'Neglectful'),
+(13, 'Abusive'),
+(13, 'Other'),
+(13, 'Difficulty providing emotional nurturance');
+
+-- 14. NEGLECT
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(14, 'Lacks adequate physical care'),
+(14, 'Lacks emotional nurturance/support'),
+(14, 'Lacks appropriate stimulation/cognitive experiences'),
+(14, 'Inappropriately left alone'),
+(14, 'Lacks necessary supervision'),
+(14, 'Inadequate/delayed medical care'),
+(14, 'Other');
+
+-- 15. ABUSE
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(15, 'Harsh/excessive discipline'),
+(15, 'Welts/bruises/burns/other injuries'),
+(15, 'Questionable explanation of injury'),
+(15, 'Attacked verbally'),
+(15, 'Fearful/hypervigilant behavior'),
+(15, 'Violent environment'),
+(15, 'Consistent negative messages'),
+(15, 'Assaulted sexually'),
+(15, 'Other');
+
+-- 16. GROWTH AND DEVELOPMENT
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(16, 'Abnormal results of developmental screening test'),
+(16, 'Abnormal weight/height/head circumference in relation to growth/age standards'),
+(16, 'Age-inappropriate behavior'),
+(16, 'Inadequate achievement/maintenance of developmental tasks'),
+(16, 'Other');
+
+-- 17. HEARING
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(17, 'Difficulty hearing normal speech tones'),
+(17, 'Difficulty hearing speech in large group settings'),
+(17, 'Difficulty hearing high frequency sounds'),
+(17, 'Absent/abnormal response to sound'),
+(17, 'Abnormal results of hearing screening test'),
+(17, 'Other');
+
+-- 18. VISION
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(18, 'Difficulty seeing small print/calibrations'),
+(18, 'Difficulty seeing distant objects'),
+(18, 'Difficulty seeing close objects'),
+(18, 'Absent/abnormal response to visual stimuli'),
+(18, 'Abnormal results of vision screening test'),
+(18, 'Squinting/blinking/tearing/blurring'),
+(18, 'Floaters/flashes'),
+(18, 'Difficulty differentiating colors'),
+(18, 'Other');
+
+-- 19. SPEECH AND LANGUAGE
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(19, 'Absent/abnormal ability to speak/vocalize'),
+(19, 'Absent/abnormal ability to understand'),
+(19, 'Lacks alternative communication skills/gestures'),
+(19, 'Inappropriate sentence structure'),
+(19, 'Limited enunciation/clarity'),
+(19, 'Inappropriate word usage'),
+(19, 'Other');
+
+-- 20. COGNITION
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(20, 'Diminished judgment'),
+(20, 'Disoriented to time/place/person'),
+(20, 'Limited recall of recent events'),
+(20, 'Limited recall of long past events'),
+(20, 'Limited calculation/sequencing skills'),
+(20, 'Limited concentration'),
+(20, 'Limited reasoning/abstract thinking ability'),
+(20, 'Impulsiveness'),
+(20, 'Repetitious language/behavior'),
+(20, 'Wanders'),
+(20, 'Other');
+
+-- 21. PAIN
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(21, 'Expresses discomfort/pain'),
+(21, 'Elevated pulse/respirations/blood pressure'),
+(21, 'Compensated movement/guarding'),
+(21, 'Restless behavior'),
+(21, 'Facial grimaces'),
+(21, 'Pallor/perspiration'),
+(21, 'Other');
+
+-- 22. CONSCIOUSNESS
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(22, 'Lethargic'),
+(22, 'Stuporous'),
+(22, 'Unresponsive'),
+(22, 'Comatose'),
+(22, 'Other');
+
+-- 23. SKIN
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(23, 'Lesion/pressure ulcer'),
+(23, 'Rash'),
+(23, 'Excessively dry'),
+(23, 'Excessively oily'),
+(23, 'Inflammation'),
+(23, 'Pruritus'),
+(23, 'Drainage'),
+(23, 'Bruising'),
+(23, 'Hypertrophy of nails'),
+(23, 'Delayed incisional healing'),
+(23, 'Other');
+
+-- 24. NEURO-MUSCULO-SKELETAL FUNCTION
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(24, 'Limited range of motion'),
+(24, 'Decreased muscle strength'),
+(24, 'Decreased coordination'),
+(24, 'Decreased muscle tone'),
+(24, 'Increased muscle tone'),
+(24, 'Decreased sensation'),
+(24, 'Increased sensation'),
+(24, 'Decreased balance'),
+(24, 'Gait/ambulation disturbance'),
+(24, 'Difficulty transferring'),
+(24, 'Fractures'),
+(24, 'Tremors/seizures'),
+(24, 'Difficulty with thermoregulation'),
+(24, 'Other');
+
+-- 25. RESPIRATION
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(25, 'Abnormal breath patterns'),
+(25, 'Unable to breathe independently'),
+(25, 'Cyanosis'),
+(25, 'Abnormal sputum'),
+(25, 'Noisy respirations'),
+(25, 'Rhinorrhea/nasal congestion'),
+(25, 'Abnormal breath sounds'),
+(25, 'Abnormal respiratory laboratory results'),
+(25, 'Other'),
+(25, 'Cough'),
+(25, 'Unable to cough/expectorate independently');
+
+-- 26. CIRCULATION
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(26, 'Edema'),
+(26, 'Cramping/pain of extremities'),
+(26, 'Decreased pulses'),
+(26, 'Discoloration of skin/cyanosis'),
+(26, 'Temperature change in affected area'),
+(26, 'Varicosities'),
+(26, 'Syncopal episodes (fainting)/dizziness'),
+(26, 'Abnormal blood pressure reading'),
+(26, 'Pulse deficit'),
+(26, 'Irregular heart rate'),
+(26, 'Excessively rapid heart rate'),
+(26, 'Excessively slow heart rate'),
+(26, 'Anginal pain'),
+(26, 'Abnormal heart sounds/murmurs'),
+(26, 'Abnormal clotting'),
+(26, 'Abnormal cardiac laboratory results'),
+(26, 'Other');
+
+-- 27. DIGESTION-HYDRATION
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(27, 'Nausea/vomiting'),
+(27, 'Difficulty/inability to chew/swallow/digest'),
+(27, 'Indigestion'),
+(27, 'Reflux'),
+(27, 'Anorexia'),
+(27, 'Anemia'),
+(27, 'Ascites'),
+(27, 'Other'),
+(27, 'Jaundice/liver enlargement'),
+(27, 'Decreased skin turgor'),
+(27, 'Cracked lips/dry mouth'),
+(27, 'Electrolyte imbalance');
+
+-- 28. BOWEL FUNCTION
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(28, 'Abnormal frequency/consistency of stool'),
+(28, 'Painful defecation'),
+(28, 'Decreased bowel sounds'),
+(28, 'Blood in stools'),
+(28, 'Abnormal color'),
+(28, 'Cramping/abdominal discomfort'),
+(28, 'Incontinent of stool'),
+(28, 'Other');
+
+-- 29. ORAL HEALTH
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(29, 'Missing/broken/malformed teeth'),
+(29, 'Caries'),
+(29, 'Excess tartar'),
+(29, 'Sore/swollen/bleeding gums'),
+(29, 'Malocclusion'),
+(29, 'Ill-fitting/missing dentures'),
+(29, 'Sensitivity to hot or cold'),
+(29, 'Other');
+
+-- 30. URINARY FUNCTION
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(30, 'Burning/painful urination'),
+(30, 'Incontinent of urine'),
+(30, 'Urgency/frequency'),
+(30, 'Difficulty initiating urination'),
+(30, 'Difficulty emptying bladder'),
+(30, 'Abnormal amount'),
+(30, 'Hematuria/abnormal color'),
+(30, 'Nocturia'),
+(30, 'Abnormal urinary laboratory results'),
+(30, 'Other');
+
+-- 31. REPRODUCTIVE FUNCTION
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(31, 'Abnormal discharge'),
+(31, 'Abnormal menstrual pattern'),
+(31, 'Difficulty managing menopause/andropause'),
+(31, 'Abnormal lumps/swelling/tenderness of genital organs or breasts'),
+(31, 'Pain during or after sexual intercourse'),
+(31, 'Infertility'),
+(31, 'Impotency'),
+(31, 'Other');
+
+-- 32. PREGNANCY
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(32, 'Difficulty bonding with unborn baby'),
+(32, 'Difficulty coping with body changes'),
+(32, 'Difficulty with prenatal exercise/rest/diet/behaviors'),
+(32, 'Fears delivery procedure'),
+(32, 'Prenatal complications/preterm labor'),
+(32, 'Inadequate social support'),
+(32, 'Other');
+
+-- 33. POSTPARTUM
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(33, 'Difficulty breast-feeding'),
+(33, 'Difficulty coping with postpartum changes'),
+(33, 'Difficulty with postpartum exercise/rest/diet/behavior'),
+(33, 'Abnormal bleeding/vaginal discharge'),
+(33, 'Postpartum complications'),
+(33, 'Abnormal depressed feelings'),
+(33, 'Other');
+
+-- 34. COMMUNICABLE/INFECTIOUS CONDITION
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(34, 'Infection'),
+(34, 'Infestation'),
+(34, 'Fever'),
+(34, 'Biological hazards'),
+(34, 'Positive screening/culture/laboratory results'),
+(34, 'Inadequate supplies/equipment/policies to prevent transmission'),
+(34, 'Does not follow infection control regimen'),
+(34, 'Inadequate immunity'),
+(34, 'Other');
+
+-- 35. NUTRITION
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(35, 'Overweight: adult BMI 25.0 or more; child BMI 95th percentile or more'),
+(35, 'Underweight: adult BMI 18.5 or less; child BMI 5th percentile or less'),
+(35, 'Lacks established standards for daily caloric/fluid intake'),
+(35, 'Exceeds established standards for daily caloric/fluid intake'),
+(35, 'Improper feeding schedule for age'),
+(35, 'Unbalanced diet'),
+(35, 'Unexplained/progressive weight loss'),
+(35, 'Unable to obtain/prepare food'),
+(35, 'Hypoglycemia'),
+(35, 'Hyperglycemia'),
+(35, 'Other'),
+(35, 'Does not follow recommended nutrition plan');
+
+-- 36. SLEEP AND REST PATTERNS
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(36, 'Sleep/rest pattern disrupts family'),
+(36, 'Frequently wakes during night'),
+(36, 'Sleepwalking'),
+(36, 'Insomnia'),
+(36, 'Nightmares'),
+(36, 'Insufficient sleep/rest for age/physical condition'),
+(36, 'Sleep apnea'),
+(36, 'Snoring'),
+(36, 'Other');
+
+-- 37. PHYSICAL ACTIVITY
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(37, 'Sedentary lifestyle'),
+(37, 'Inadequate/inconsistent exercise routine'),
+(37, 'Inappropriate type/amount of exercise for age/physical condition'),
+(37, 'Other');
+
+-- 38. PERSONAL CARE
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(38, 'Difficulty laundering clothing'),
+(38, 'Difficulty with bathing'),
+(38, 'Difficulty with toileting activities'),
+(38, 'Difficulty dressing lower body'),
+(38, 'Difficulty dressing upper body'),
+(38, 'Foul body odor'),
+(38, 'Difficulty shampooing/combing hair'),
+(38, 'Difficulty brushing/flossing/mouth care'),
+(38, 'Unwilling/unable/forgets to complete personal care activities'),
+(38, 'Other');
+
+-- 39. SUBSTANCE USE
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(39, 'Abuses over-the-counter/prescription medications'),
+(39, 'Uses "street"-recreational drugs'),
+(39, 'Abuses alcohol'),
+(39, 'Smokes/uses tobacco products'),
+(39, 'Difficulty performing normal routines'),
+(39, 'Reflex disturbances'),
+(39, 'Behavior change'),
+(39, 'Exposure to cigarette/cigar smoke'),
+(39, 'Buys/sells illegal substances'),
+(39, 'Other');
+
+-- 40. FAMILY PLANNING
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(40, 'Inappropriate/insufficient knowledge about family planning methods'),
+(40, 'Inappropriate/insufficient knowledge about preconception health practices'),
+(40, 'Inaccurate/inconsistent use of family planning methods'),
+(40, 'Dissatisfied with present family planning method'),
+(40, 'Fears others'' reactions regarding family planning choices'),
+(40, 'Difficulty obtaining family planning methods'),
+(40, 'Other');
+
+-- 41. HEALTH CARE SUPERVISION
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(41, 'Fails to obtain routine/preventive health care'),
+(41, 'Fails to seek care for symptoms requiring evaluation/treatment'),
+(41, 'Fails to return as requested to health care provider'),
+(41, 'Inability to coordinate multiple appointments/treatment plans'),
+(41, 'Inconsistent source of health care'),
+(41, 'Inadequate source of health care'),
+(41, 'Inadequate treatment plan'),
+(41, 'Other');
+
+-- 42. MEDICATION REGIMEN
+INSERT INTO symptom (problem_id, symptom_description) VALUES
+(42, 'Does not follow recommended dosage/schedule'),
+(42, 'Evidence of side effects/adverse reactions'),
+(42, 'Inadequate system for taking medications'),
+(42, 'Improper storage of medication'),
+(42, 'Fails to obtain refills appropriately'),
+(42, 'Fails to obtain immunizations'),
+(42, 'Inadequate medication regimen'),
+(42, 'Unable to take medications without help'),
+(42, 'Other');
 
 
--- 3.4 INTERVENTION TARGETS (Exactly 75 Targets - Alphabetical)
--- Note: Added missing targets to reach 75.
-INSERT INTO intervention_target (name) VALUES 
-('Anatomy/physiology'),
-('Behavior modification'),
-('Bladder care'),
-('Blood glucose monitoring'),
-('Bonding/attachment'),
-('Bowel care'),
-('Cardiac care'),
-('Cast care'),
-('Communication'),
-('Coping skills'),
-('Day care/respite'),
-('Dietary management'),
-('Discipline'),
-('Dressing change/wound care'),
-('Durable medical equipment'),
-('Education'),
-('Emergency planning'),
-('Employment'),
-('Environment'),
-('Exercises'),
-('Family planning care'),
-('Feeding procedures'),
-('Finances'),
-('Fluid intake'),
-('Gait training'),
-('Growth/development care'),
-('Health care supervision'),
-('Hearing care'),
-('Homemaking'),
-('Hospice/palliative care'),
-('Infection control'),
-('Injection administration'),
-('Interaction'),
-('Laboratory findings'),
-('Legal system'),
-('Medical/dental care'),
-('Medication action/side effects'),
-('Medication administration'),
-('Medication set-up'),
-('Mobility/transferring'),
-('Nursing care, supplementary'),
-('Nutritionist'),
-('Occupational therapy'),
-('Ostomy care'),
-('Other community resource'),
-('Pain control'),
-('Personal care'),
-('Physical therapy'),
-('Positioning'),
-('Range of motion'),
-('Recreational therapy'),
-('Relaxation/breathing techniques'),
-('Rest/sleep'),
-('Safety'),
-('Screening'),
-('Seizure precautions'),
-('Signs/symptoms-mental/emotional'),
-('Signs/symptoms-physical'),
-('Skin care'),
-('Social work/counseling'),
-('Specimen collection'),
-('Speech and language pathology'),
-('Spiritual care'),
-('Stimulation/nurturance'),
-('Stress management'),
-('Substance use cessation'),
-('Supplies'),
-('Support group'),
-('Support system'),
-('Technological equipment'),
-('Tobacco use cessation'),
-('Transportation'),
-('Urinary catheter care'),
-('Vision care'),
-('Wellness'),
-('Wound care');
+-- 3.4 INTERVENTION TARGETS
+INSERT INTO intervention_target (target_id, target_name, target_description) VALUES
+(1, 'Anatomy/physiology', 'Structure and function of the human body'),
+(2, 'Anger management', 'Activities that decrease or control negative feelings and interactions, including violence'),
+(3, 'Behavior modification', 'Activities that change habits, conduct, or patterns of action'),
+(4, 'Bladder care', 'Activities that promote urinary bladder function such as bladder retraining, catheter changes, and catheter irrigation'),
+(5, 'Bonding/attachment', 'A mutual, positive relationship between two people such as a parent/caregiver and an infant/child'),
+(6, 'Bowel care', 'Activities that promote bowel function such as bowel training and enemas'),
+(7, 'Cardiac care', 'Activities that promote cardiac or circulatory function such as energy conservation and fluid change'),
+(8, 'Caretaking/parenting skills', 'Activities such as feeding, bathing, discipline, nurturing, and stimulation provided to a dependent child or adult'),
+(9, 'Cast care', 'Activities that promote cleanliness, dryness, support, alignment, and relief of pain, pressure, and construction of an injured body part immobilized by a cast, splint, or other device.'),
+(10, 'Communication', 'Exchange of verbal or nonverbal information between the individual/family/community and others'),
+(11, 'Community outreach worker services', 'Assistance with managing health care, transportation, household, and child/adult care responsibilities provided by qualified employees under the supervision of professional health care providers'),
+(12, 'Continuity of care', 'Communication of information among providers/organizations to provide safe and effective care and decrease duplication of efforts/services'),
+(13, 'Coping skills', 'Ability to effectively manage challenges and changes such as illness, disability, loss of income, birth of a child, or death of a family member.'),
+(14, 'Day care/respite', 'Individuals or organizations that provide child/adult supervision while the parent/usual caregiver attends school, works, or has relief from usual responsibilities'),
+(15, 'Dietary management', 'Nurturing with balanced food and fluids that sustain life, provide energy, and promote growth and health'),
+(16, 'Discipline', 'Nurturing practices that promote appropriate behavior, conduct, and self-control'),
+(17, 'Dressing change/wound care', 'Activities that promote wound healing and prevent infection such as observing, measuring, cleansing, irrigating, and/or covering a wound, lesion or incision.'),
+(18, 'Durable medical equipment', 'Non-disposable items used while providing care such as special beds, walkers, and apnea monitors.'),
+(19, 'Education', 'Formal programs that offer general, technical, or individualized studies for students of all ages.'),
+(20, 'Employment', 'Occupation that provides income.'),
+(21, 'End-of-life care', 'Activities that provide physical comfort and emotional calm for those who are dying by involving/including family, friends, spiritual concerns, rituals, pain control, and physical care.'),
+(22, 'Environment', 'Physical surroundings, conditions, or influences of residences, neighborhood, and/or community'),
+(23, 'Exercises', 'Therapeutic physical activities such as active/passive range of motion, isometrics, stretching, and weight lifting.'),
+(24, 'Family planning care', 'Activities that support consideration and use of methods to prepare for and space pregnancy'),
+(25, 'Feeding procedures', 'Provision of food or fluids using methods such as breast, formula, spoon, tube, and intravenous solutions.'),
+(26, 'Finances', 'Management of income and expenses'),
+(27, 'Gait training', 'Systematic activities that promote walking with or without assistive devices.'),
+(28, 'Genetics', 'Diagnosis, consultation, and procedures intended to prevent, identify, or treat birth defects, congenital anomalies, or conditions.'),
+(29, 'Growth/development care', 'Activities that promote progressive maturation in relation to age such as measuring weight, height, and stimulating achievement of developmental milestones.'),
+(30, 'Home', 'Place of residence'),
+(31, 'Homemaking/housekeeping', 'Management of activities such as cleaning, laundry, and food preparation in the home or the health care facility'),
+(32, 'Infection precautions', 'Activities that decrease the incidence and transmission of contagious disease such as hand washing, isolation, specimen collection, contact follow-up, reporting procedures, and environmental control.'),
+(33, 'Interaction', 'Reciprocal action or influence among people including parent-child, parent-teacher, and nurse-client.'),
+(34, 'Interpreter/translator services', 'Assistance with verbal or written communication in other languages provided by qualified employees who are under the supervision of professional health care practitioners.'),
+(35, 'Laboratory findings', 'Results of fluid and tissue tests such as urine and blood analysis.'),
+(36, 'Legal system', 'Authority, rules, of conduct, or administration of the law'),
+(37, 'Medical/dental care', 'Assessment/diagnosis and treatment provided by physicians, dentist, and their staff or assistants'),
+(38, 'Medication action/side effects', 'Positive and/or negative consequences of medications'),
+(39, 'Medication administration', 'Activities that involve applying or giving medications and that are completed by clients, parents/caregivers, or health practitioners'),
+(40, 'Medication coordination/ordering', 'Communication with those who prescribe and dispense medications and the individual/family/community support systems to ensure that appropriate medication and supplies are obtained in a timely manner.'),
+(41, 'Medication prescription', 'A formalized pharmaceutical order/official request for medications'),
+(42, 'Medication set-up', 'Act of preparing for medication administration by filling/checking an oral medication organizer, prefilling syringes, or inserting intravenous access devices.'),
+(43, 'Mobility/transfers', 'Body movements that change position or allow participation in activities such as walking'),
+(44, 'Nursing care', 'Assessment/diagnosis and treatment provided by nurses and their staff or assistants'),
+(45, 'Nutritionist care', 'Assessment/diagnosis and treatment provided by nutritionists/registered dieticians and their staff or assistants.'),
+(46, 'Occupational therapy care', 'Assessment/diagnosis and treatment provided by occupational therapists and their assistants'),
+(47, 'Ostomy care', 'Activities to manage elimination of urine or stool through artificial openings such as a colostomy and ileostomy.'),
+(48, 'Other community resources', 'Organizations or groups that offer goods or services not specifically identified in other targets such as exercise facilities, food pantries/distribution centers, or faith communities.'),
+(49, 'Paraprofessional/aide care', 'Assistance provided by qualified aides, home health aides, and nursing assistants under the supervision of professional health care practitioners.'),
+(50, 'Personal hygiene', 'Individual grooming activities such as bathing, shampooing, and toileting.'),
+(51, 'Physical therapy care', 'Assessment/diagnosis and treatment provided by physical therapists and their staff or assistants.'),
+(52, 'Positioning', 'Alignment of the body to promote comfort and function'),
+(53, 'Recreational therapy care', 'Assessment/diagnosis and treatment provided by recreational therapists and their staff or assistants'),
+(54, 'Relaxation/breathing techniques', 'Activities that relieve muscle tension, induce a quieting body response, and rebuild resources such as deep breathing exercises, guided imagery, meditation, and massage'),
+(55, 'Respiratory care', 'Activities that promote respiratory or pulmonary function such as suctioning and nebulizer treatments.'),
+(56, 'Respiratory therapy care', 'Assessment/diagnosis and treatment provided by respiratory therapists and staff or assistants'),
+(57, 'Rest/sleep', 'Periodic state of quiet and varying degrees of consciousness'),
+(58, 'Safety', 'Freedom of risk, the occurrence of injury, or loss'),
+(59, 'Screening procedures', 'Evaluation strategies used to identify risk for conditions, diagnose disease early, and monitor change/progression over time'),
+(60, 'Sickness/injury care', 'Activities in response to illness or accidents such as first aid and temperature taking'),
+(61, 'Signs/symptoms-mental/emotional', 'Objective or subjective evidence of mental/emotional health problems such as depression, confusion, or agitation.'),
+(62, 'Signs/symptoms-physical', 'Objective or subjective evidence of physical health problems such as fever, sudden weight loss, or statement of pain.'),
+(63, 'Skin care', 'Activities that promote skin integrity such as application of lotion or massage.'),
+(64, 'Social work/counseling care', 'Assessment/diagnosis and treatment provided by social workers, counselors, and their staff or assistants.'),
+(65, 'Specimen collection', 'Activities designed to obtain samples of human and animal tissue, fluids, secretions, or excreta such as blood, urine, stool, sputum, and drainage.'),
+(66, 'Speech and language pathology care', 'Assessment/diagnosis and treatment provided by speech and language pathologists and their staff or assistants.'),
+(67, 'Spiritual care', 'Activities that promote personal serenity and comfort and involve spiritual concerns/practices'),
+(68, 'Stimulation/nurturance', 'Activities that promote healthy physical, intellectual, and emotional development.'),
+(69, 'Stress management', 'Cognitive, emotional, and physical activities that promote healthy functioning during difficult life circumstances.'),
+(70, 'Substance use cessation', 'Activities that promote discontinuing use of harmful/addicting materials'),
+(71, 'Supplies', 'Disposable items used while providing care such as dressings, syringes, tubing, diapers, and baby bottles.'),
+(72, 'Support group', 'Organized sources of information and assistance such as focused classes and organizations, telephone reassurance, and reliable internet sites that address a specific topic such as parenting, alcoholism, obesity, and Alzheimer''s disease.'),
+(73, 'Support system', 'Circle of family, friends, and associates that provide love, care, and assistance to promote health and manage illness'),
+(74, 'Transportation', 'Methods of travel such as car, bus, taxi, scooter, or cart'),
+(75, 'Wellness', 'Practices that promote physical and mental health such as exercise, nutrition, and immunizations'),
+(76, 'Other', 'Persons, places, things, or activities not identified in this list');
+
 
 -- 3.5 MODIFIERS
-INSERT INTO modifier_status (status_id, name) VALUES 
-(1, 'Actual'), (2, 'Potential'), (3, 'Health Promotion');
+INSERT INTO modifier_domain (modifier_domain_id, modifier_domain_name, modifier_domain_description) VALUES 
+(1, 'Individual', 'A person who lives alone and where a health-related (focus) area applies, or a family member for whom this applies'),
+(2, 'Family', 'A social unit, or connected group of individuals who live together and for whom a health-related (focus) area applies'),
+(3, 'Community', 'The individuals and/or living units that together form a group, neighborhood or other geographic area and where a health-related (focus) area applies');
 
-INSERT INTO modifier_subject (subject_id, name) VALUES 
-(1, 'Individual'), (2, 'Family'), (3, 'Community');
+INSERT INTO modifier_type (modifier_type_id, modifier_type_name, modifier_type_description) VALUES 
+(1, 'Health Promotion', 'Interest of the client in improving knowledge, behavior and expectations regarding health and in developing more sources that maintain or improve well-being, while there are no risk factors, signals or symptoms'),
+(2, 'Potential', 'Client situation characterized by the presence of certain health patterns, habits, behaviors or risk factors, which impede optimal health and where signals and symptoms are absent'),
+(3, 'Actual', 'Client situation characterized by the presence of one or more signals and symptoms that impede optimal health');
 
 -- 3.6 INTERVENTION CATEGORIES
-INSERT INTO intervention_category (category_id, name) VALUES 
-(1, 'Teaching, Guidance, and Counseling'),
-(2, 'Treatments and Procedures'),
-(3, 'Case Management'),
-(4, 'Surveillance');
+INSERT INTO intervention_category (category_id, category_name, category_description) VALUES 
+(1, 'Teaching, Guidance, and Counseling', 'Activities designed to provide information and materials, encourage action and responsibility for self-care and coping, and assist the individual, family, or community to make decisions ans solve problems'),
+(2, 'Treatments and Procedures', 'Technical activities such as wound care, specimen collection, resistive exercises, and medication prescriptions that are designed to prevent, decrease, or alleviate signs and symptoms for the individual, family or community'),
+(3, 'Case Management', 'Activities such as coordination, advocacy, and referral that facilitate service delivery, promote assertiveness, guide the individual, family, or community toward use of appropriate resources, and improve communication among health and human service providers'),
+(4, 'Surveillance', 'Activities such as detection, measurement, critical analysis, and monitoring intended the status of the individual, family, or community''s status relation to a given condition or phenomenon');
 
 -- 3.7 OUTCOME PHASES
-INSERT INTO outcome_phase (phase_id, name) VALUES
-(1, 'Admission'),
-(2, 'Interim'),
-(3, 'Discharge');
+INSERT INTO outcome_phase (phase_id, phase_name, phase_description) VALUES
+(1, 'Admission', 'Evaluation conducted at the beginning of the service period to establish a baseline for the client''s Knowledge, Behavior, and Status.'),
+(2, 'Interim', 'Evaluation conducted at specific intervals during the service period to monitor progress and adjust interventions as needed.'),
+(3, 'Discharge', 'Evaluation conducted at the end of the service period to assess final outcomes and determine the effectiveness of interventions.');
+
+-- 3.8 RATING STATUS
+INSERT INTO outcome_rating_status (rating_status_id, rating_status_label, rating_status_description) VALUES
+(1, 'Extreme signs/symptoms', 'Client exhibits extreme signs or symptoms in relation to objective and subjective defining characteristics'),
+(2, 'Severe signs/symptoms', 'Client exhibits severe signs or symptoms in relation to objective and subjective defining characteristics'),
+(3, 'Moderate signs/symptoms', 'Client exhibits moderate signs or symptoms in relation to objective and subjective defining characteristics'),
+(4, 'Minimal signs/symptoms', 'Client exhibits minimal signs or symptoms in relation to objective and subjective defining characteristics'),
+(5, 'No signs/symptoms', 'Client exhibits no signs or symptoms in relation to objective and subjective defining characteristics');
+
+-- 3.9 RATING KNOWLEDGE
+INSERT INTO outcome_rating_knowledge (rating_knowledge_id, rating_knowledge_label, rating_knowledge_description) VALUES
+(1, 'No knowledge', 'Client has no ability to remember and interpret information'),
+(2, 'Minimal knowledge', 'Client has minimal ability to remember and interpret information'),
+(3, 'Basic knowledge', 'Client has basic ability to remember and interpret information'),
+(4, 'Adequate knowledge', 'Client has adequate ability to remember and interpret information'),
+(5, 'Superior knowledge', 'Client has superior ability to remember and interpret information');
+
+-- 3.10 RATING BEHAVIOR
+INSERT INTO outcome_rating_behavior (rating_behavior_id, rating_behavior_label, rating_behavior_description) VALUES
+(1, 'Not appropriate behavior', 'Client exhibits observable responses, actions, or activities that are not appropriate for the occasion or purpose'),
+(2, 'Rarely appropriate behavior', 'Client exhibits observable responses, actions, or activities that are rarely appropriate for the occasion or purpose'),
+(3, 'Inconsistently appropriate behavior', 'Client exhibits observable responses, actions, or activities that are inconsistently appropriate for the occasion or purpose'),
+(4, 'Usually appropriate behavior', 'Client exhibits observable responses, actions, or activities that are usually appropriate for the occasion or purpose'),
+(5, 'Consistently appropriate behavior', 'Client exhibits observable responses, actions, or activities that are consistently appropriate for the occasion or purpose');
 
 COMMIT;

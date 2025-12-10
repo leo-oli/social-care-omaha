@@ -54,9 +54,8 @@ def get_care_plan(client_id: int, session: Session = Depends(get_session)):
             problem_read = ClientProblemRead(
                 client_problem_id=cp.client_problem_id,
                 problem=cp.problem,
-                modifier_status=cp.modifier_status,
-                modifier_subject=cp.modifier_subject,
-                # The relationship loader will populate these based on the model
+                modifier_domain=cp.modifier_domain,
+                modifier_type=cp.modifier_type,
                 selected_symptoms=[
                     ClientProblemSymptomRead.model_validate(s)
                     for s in cp.selected_symptoms
