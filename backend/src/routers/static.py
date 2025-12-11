@@ -53,15 +53,19 @@ def get_problems(domain_id: int | None = None, session: Session = Depends(get_se
     return problems
 
 
-@router.get("/problems/{problem_id}/symptoms", response_model=list[SymptomRead])
-def get_symptoms_for_problem(problem_id: int, session: Session = Depends(get_session)):
-    symptoms = session.exec(
-        select(Symptom).where(Symptom.problem_id == problem_id)
-    ).all()
+@router.get("/symptoms", response_model=list[SymptomRead])
+def get_all_symptoms(
+    problem_id: int | None = None, session: Session = Depends(get_session)
+):
+    if problem_id:
+        symptoms = session.exec(
+            select(Symptom).where(Symptom.problem_id == problem_id)
+        ).all()
+    else:
+        symptoms = session.exec(select(Symptom)).all()
     if not symptoms:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No symptoms found for this problem",
+            status_code=status.HTTP_404_NOT_FOUND, detail="No symptoms found"
         )
     return symptoms
 
