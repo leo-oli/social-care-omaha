@@ -42,7 +42,7 @@ def get_care_plan(client_id: int, session: Session = Depends(get_session)):
             ),
         )
         .where(ClientProblem.client_id == client_id)
-        .where(ClientProblem.is_active)
+        .where(ClientProblem.is_active == True)  # noqa: E712
         .where(ClientProblem.deleted_at == None)  # noqa: E711
     )
     active_problems_db = session.exec(problems_query).all()

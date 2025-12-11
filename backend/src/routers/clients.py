@@ -1,8 +1,12 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlmodel import Session, select
 
 from ..database import get_session
+from ..services.export import (
+    generate_care_plan_summary_text,
+    get_group_office_payload_mock,
+)
 from ..models import (
     Client,
     ClientPII,
@@ -15,7 +19,7 @@ from ..models import (
     ModifierType,
     OutcomeScore,
 )
-from ..encryption import decrypt_data, encrypt_data
+from ..services.encryption import decrypt_data, encrypt_data
 from ..schemas import (
     ClientCreate,
     ClientReadDetails,
@@ -188,6 +192,7 @@ def get_client_problems(client_id: int, session: Session = Depends(get_session))
     problems = session.exec(
         select(ClientProblem)
         .where(ClientProblem.client_id == client_id)
+        .where(ClientProblem.is_active == True)  # noqa: E712
         .where(ClientProblem.deleted_at == None)  # noqa: E711
     ).all()
     return problems
@@ -275,6 +280,12 @@ def add_symptom_to_problem(
             status_code=status.HTTP_404_NOT_FOUND, detail="Client problem not found"
         )
 
+    if not problem.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Client problem is not active",
+        )
+
     # Check for duplicates
     existing_symptom = session.exec(
         select(ClientProblemSymptom)
@@ -317,6 +328,12 @@ def get_problem_scores(
             status_code=status.HTTP_404_NOT_FOUND, detail="Client problem not found"
         )
 
+    if not problem.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Client problem is not active",
+        )
+
     scores = session.exec(
         select(OutcomeScore)
         .where(OutcomeScore.client_problem_id == client_problem_id)
@@ -336,47 +353,32 @@ def export_client_data(
             status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
         )
 
+    summary_text, client_name = generate_care_plan_summary_text(client_id, session)
+
     if format == "txt":
-        pii = session.exec(
-            select(ClientPII).where(ClientPII.client_id == client_id)
-        ).first()
-        problems = session.exec(
-            select(ClientProblem)
-            .where(ClientProblem.client_id == client_id)
-            .where(ClientProblem.deleted_at == None)  # noqa: E711
-        ).all()
-
-        if pii is None:
+        if not client_name:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Client PII not found for export",
-            )
+                status_code=404, detail=summary_text
+            )  # e.g. client not found
 
-        pii.first_name = decrypt_data(pii.first_name)
-        pii.last_name = decrypt_data(pii.last_name)
-
-        content = f"Client Export: {pii.first_name} {pii.last_name}\n"
-        content += f"DOB: {pii.date_of_birth}\n"
-        content += f"Email: {pii.email}\n\n"
-        content += "--- Problems ---\n"
-        for prob in problems:
-            content += f"- {prob.problem.problem_name}\n"
+        filename_date = date.today().isoformat()
+        filename_name = "".join(
+            c for c in client_name if c.isalnum() or c in " _-"
+        ).rstrip()
 
         return Response(
-            content=content,
+            content=summary_text,
             media_type="text/plain",
             headers={
-                "Content-Disposition": f"attachment; filename=client_{client_id}_export.txt"
+                "Content-Disposition": f'attachment; filename="CarePlan_{filename_name}_{filename_date}.txt"'
             },
         )
 
     elif format == "group_office":
-        return {
-            "status": "success",
-            "external_system": "GroupOffice",
-            "exported_at": datetime.now(timezone.utc).isoformat(),
-            "client_id": client.client_uuid,
-        }
+        mock_payload = get_group_office_payload_mock(
+            str(client.client_uuid), summary_text
+        )
+        return mock_payload
 
     else:
         raise HTTPException(
