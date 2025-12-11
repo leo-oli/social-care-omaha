@@ -8,6 +8,7 @@ from .routers import (
     care_plans,
     clients,
     interventions,
+    problems,
     static,
 )
 
@@ -26,6 +27,7 @@ app.include_router(clients.router, prefix="/api/v1")
 app.include_router(assessments.router, prefix="/api/v1")
 app.include_router(interventions.router, prefix="/api/v1")
 app.include_router(care_plans.router, prefix="/api/v1")
+app.include_router(problems.router, prefix="/api/v1")
 
 
 # health check

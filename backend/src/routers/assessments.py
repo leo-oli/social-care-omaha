@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from ..database import get_session
 from ..models import (
@@ -10,7 +10,7 @@ from ..models import (
     OutcomeRatingStatus,
     OutcomePhase,
 )
-from ..schemas import OutcomeScoreCreate
+from ..schemas import OutcomeScoreCreate, OutcomeScoreRead
 
 router = APIRouter(prefix="/clients", tags=["assessments"])
 
@@ -69,3 +69,33 @@ def create_outcome_score(
     session.commit()
     session.refresh(new_score)
     return new_score
+
+
+@router.get(
+    "/{client_id}/problems/{client_problem_id}/scores",
+    response_model=list[OutcomeScoreRead],
+)
+def get_problem_scores(
+    client_id: int,
+    client_problem_id: int,
+    session: Session = Depends(get_session),
+):
+    problem = session.get(ClientProblem, client_problem_id)
+    if not problem or problem.client_id != client_id or problem.deleted_at:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Client problem not found"
+        )
+
+    if not problem.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Client problem is not active",
+        )
+
+    scores = session.exec(
+        select(OutcomeScore)
+        .where(OutcomeScore.client_problem_id == client_problem_id)
+        .where(OutcomeScore.deleted_at == None)  # noqa: E711
+        .order_by(OutcomeScore.date_recorded.desc())  # type: ignore
+    ).all()
+    return scores
