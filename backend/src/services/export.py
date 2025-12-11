@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import datetime
 from typing import Any, Dict
 from sqlmodel import Session, select
 
@@ -28,7 +28,7 @@ def generate_care_plan_summary_text(
     last_name = decrypt_data(pii.last_name)
     client_name = f"{first_name} {last_name}"
     dob = pii.date_of_birth
-    generation_date = date.today().isoformat()
+    generation_date = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     lines = [
         "OMAHA SYSTEM CARE PLAN SUMMARY",
@@ -49,12 +49,13 @@ def generate_care_plan_summary_text(
     for i, problem in enumerate(active_problems, 1):
         problem_details = db.get(models.OmahaProblem, problem.problem_id)
         modifier_type = db.get(models.ModifierType, problem.modifier_type_id)
+        modifier_domain = db.get(models.ModifierDomain, problem.modifier_domain_id)
 
-        if not problem_details or not modifier_type:
+        if not problem_details or not modifier_type or not modifier_domain:
             continue
 
         lines.append(
-            f"PROBLEM {i}: {problem_details.problem_name} (Status: {modifier_type.modifier_type_name}, Subject: Individual)"
+            f"PROBLEM {i}: {problem_details.problem_name} (Type: {modifier_type.modifier_type_name}, Domain: {modifier_domain.modifier_domain_name})"
         )
 
         symptoms = db.exec(

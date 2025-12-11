@@ -1,4 +1,4 @@
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlmodel import Session, select
 
@@ -272,10 +272,12 @@ def export_client_data(
                 status_code=404, detail=summary_text
             )  # e.g. client not found
 
-        filename_date = date.today().isoformat()
-        filename_name = "".join(
-            c for c in client_name if c.isalnum() or c in " _-"
-        ).rstrip()
+        filename_date = datetime.now().strftime("%Y-%m-%d_%H-%M")
+        filename_name = (
+            "".join(c for c in client_name if c.isalnum() or c in " _-")
+            .replace(" ", "-")
+            .rstrip()
+        )
 
         return Response(
             content=summary_text,
