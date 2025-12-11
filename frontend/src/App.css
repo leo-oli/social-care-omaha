@@ -1,15 +1,15 @@
 .App {
   min-height: 100vh;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background: #f5f7fa;
+  background: #faf8f0; 
 }
 
 .App-header {
-  background: linear-gradient(135deg, #4a6fa5 0%, #2c3e50 100%);
-  color: white;
+  background: linear-gradient(135deg, #2c5530 0%, #1e3a24 100%); 
+  color: #fefefe; 
   padding: 2rem;
   text-align: center;
-  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.15);
   margin-bottom: 2rem;
 }
 
@@ -20,7 +20,7 @@
 
 .App-header p {
   margin: 0;
-  opacity: 0.9;
+  opacity: 0.95;
   font-size: 1.1rem;
 }
 
@@ -33,64 +33,70 @@
 .categories-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 2rem; 
-  row-gap: 5rem; 
-  margin-top: 1rem; 
+  gap: 2rem;
+  row-gap: 5rem;
+  margin-top: 1rem;
 }
 
 .category-card {
-  background: white;
-  border-radius: 10px; 
-  padding: 1.5rem; 
-  box-shadow: 0 3px 5px rgba(0, 0, 0, 0.1); 
+  background: #ffffff; 
+  border-radius: 10px;
+  padding: 1.5rem;
+  box-shadow: 0 3px 5px rgba(44, 85, 48, 0.1);
   cursor: pointer;
   transition: all 0.3s ease;
-  border: 2px solid transparent;
+  border: 2px solid #e0d6b8; 
   height: 100%;
   display: flex;
   flex-direction: column;
-  min-height: 180px; 
+  min-height: 180px;
 }
 
 .category-card h3 {
-  color: #2c3e50;
-  margin-bottom: 0.75rem; 
-  font-size: 1.3rem; 
+  color: #1e3a24; 
+  margin-bottom: 0.75rem;
+  font-size: 1.3rem;
 }
 
 .category-card p {
-  color: #666;
+  color: #2d2d2d; 
   line-height: 1.5;
-  margin-bottom: 1rem; 
+  margin-bottom: 1rem;
   flex-grow: 1;
-  font-size: 0.95rem; 
+  font-size: 0.95rem;
 }
 
 .select-btn {
   display: inline-block;
-  background: #4a6fa5;
-  color: white;
-  padding: 10px 20px; 
-  border-radius: 6px; 
+  background: #2c5530; 
+  color: #ffffff; 
+  padding: 10px 20px;
+  border-radius: 6px;
   font-weight: 600;
   transition: background 0.3s ease;
   text-align: center;
   margin-top: auto;
   width: fit-content;
-  font-size: 1rem; 
+  font-size: 1rem;
+  border: 2px solid transparent; 
+}
+
+.select-btn:hover, .select-btn:focus {
+  background: #1e3a24; 
+  outline: 2px solid #4a7c59; 
 }
 
 /* Subcategories & Sub-subcategories */
 .subcategories-container,
 .subsubcategories-container {
-  background: white;
+  background: #ffffff;
   border-radius: 12px;
   padding: 2rem;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 .back-btn {
-  background: #6c757d;
+  background: #5d6d5d; 
   color: white;
   border: none;
   padding: 10px 20px;
@@ -99,19 +105,25 @@
   margin-bottom: 2rem;
   font-size: 1rem;
   transition: background 0.3s ease;
+  border: 2px solid transparent;
 }
 
 .back-btn:hover {
-  background: #5a6268;
+  background: #4a5c4a;
+}
+
+.back-btn:focus {
+  outline: 2px solid #2c5530;
+  outline-offset: 2px;
 }
 
 .category-description {
-  color: #666;
+  color: #221814; 
   font-size: 1.2rem;
   text-align: center;
   margin-bottom: 2rem;
   padding-bottom: 1rem;
-  border-bottom: 2px solid #eee;
+  border-bottom: 2px solid #e0d6b8;
 }
 
 .subcategories-grid,
@@ -124,31 +136,31 @@
 
 .subcategory-card,
 .subsubcategory-card {
-  background: #f8f9fa;
+  background: #f8f6f0; 
   border-radius: 10px;
   padding: 1.5rem;
   cursor: pointer;
   transition: all 0.3s ease;
-  border: 2px solid #e9ecef;
+  border: 2px solid #d4c9a6; 
 }
 
 .subcategory-card:hover,
 .subsubcategory-card:hover {
-  border-color: #4a6fa5;
+  border-color: #2c5530;
   transform: translateY(-3px);
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 5px 15px rgba(44, 85, 48, 0.15);
 }
 
 .subcategory-card h3,
 .subsubcategory-card h3 {
-  color: #2c3e50;
+  color: #1e3a24;
   margin-bottom: 0.5rem;
   font-size: 1.3rem;
 }
 
 .subcategory-card p,
 .subsubcategory-card p {
-  color: #666;
+  color: #2d2d2d; 
   font-size: 0.95rem;
   line-height: 1.5;
   margin-bottom: 1rem;
@@ -156,23 +168,23 @@
 
 /* Questions */
 .questions-container {
-  background: white;
+  background: #ffffff;
   border-radius: 12px;
   padding: 2rem;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 .questions-container h2 {
-  color: #2c3e50;
+  color: #1e3a24;
   margin-bottom: 0.5rem;
 }
 
 .questions-container .description {
-  color: #666;
+  color: #444;
   margin-bottom: 2rem;
   font-size: 1.1rem;
   padding-bottom: 1rem;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid #e0d6b8;
 }
 
 .questions-form {
@@ -182,14 +194,14 @@
 }
 
 .question-group {
-  background: #f8f9fa;
+  background: #f8f6f0;
   padding: 2rem;
   border-radius: 10px;
-  border-left: 4px solid #4a6fa5;
+  border-left: 4px solid #2c5530; 
 }
 
 .question-group h4 {
-  color: #2c3e50;
+  color: #1e3a24;
   margin-bottom: 1.5rem;
   font-size: 1.2rem;
   text-transform: uppercase;
@@ -203,9 +215,16 @@
 .question label {
   display: block;
   font-weight: 600;
-  color: #495057;
+  color: #2d2d2d; 
   margin-bottom: 1rem;
   font-size: 1.1rem;
+}
+
+.question-help {
+  color: #555; 
+  font-size: 0.9rem;
+  margin-top: -0.5rem;
+  margin-bottom: 1rem;
 }
 
 .radio-options,
@@ -221,16 +240,23 @@
   align-items: center;
   gap: 1rem;
   cursor: pointer;
-  color: #495057;
+  color: #2d2d2d;
   font-size: 1rem;
   padding: 0.75rem;
   border-radius: 6px;
   transition: background 0.2s ease;
+  border: 1px solid transparent;
 }
 
 .radio-label:hover,
 .checkbox-label:hover {
-  background: #e9ecef;
+  background: #f0ecde;
+}
+
+.radio-label:focus-within,
+.checkbox-label:focus-within {
+  border: 1px solid #2c5530;
+  background: #f0ecde;
 }
 
 .radio-label input[type="radio"],
@@ -238,6 +264,7 @@
   cursor: pointer;
   width: 20px;
   height: 20px;
+  accent-color: #2c5530; 
 }
 
 .radio-text,
@@ -251,11 +278,11 @@
   justify-content: space-between;
   margin-top: 3rem;
   padding-top: 2rem;
-  border-top: 1px solid #eee;
+  border-top: 2px solid #e0d6b8;
 }
 
 .nav-btn {
-  background: #6c757d;
+  background: #5d6d5d;
   color: white;
   border: none;
   padding: 12px 30px;
@@ -264,18 +291,24 @@
   font-size: 1rem;
   font-weight: 600;
   transition: background 0.3s ease;
+  border: 2px solid transparent;
 }
 
 .nav-btn:hover {
-  background: #5a6268;
+  background: #4a5c4a;
+}
+
+.nav-btn:focus {
+  outline: 2px solid #2c5530;
+  outline-offset: 2px;
 }
 
 .next-btn {
-  background: #4a6fa5;
+  background: #2c5530;
 }
 
 .next-btn:hover {
-  background: #3a5a80;
+  background: #1e3a24;
 }
 
 /* Action Buttons */
@@ -285,13 +318,13 @@
   gap: 5rem;
   margin-top: 2rem;
   padding-top: 2rem;
-  border-top: 1px solid #eee;
+  border-top: 2px solid #e0d6b8;
   text-align: center;
 }
 
-/* Export Button - Big and Green */
+/* Export Button */
 .export-btn {
-  background: #28a745; /* Green color */
+  background: #28a745; 
   color: white;
   border: none;
   padding: 12px 30px;
@@ -303,11 +336,16 @@
 }
 
 .export-btn:hover {
-  background: #218838; /* Darker green for hover */
+  background: #218838;
+}
+
+.export-btn:focus {
+  outline: 2px solid #1c7430;
+  outline-offset: 2px;
 }
 
 .new-data-btn {
-  background: #28a745; /* Same green as export button */
+  background: #28a745; 
   color: white;
   border: none;
   padding: 12px 30px;
@@ -320,10 +358,15 @@
 }
 
 .new-data-btn:hover {
-  background: #218838; /* Same darker green for hover */
+  background: #218838; 
 }
 
-/* Reset Button - Big and Red */
+.new-data-btn:focus {
+  outline: 2px solid #1c7430;
+  outline-offset: 2px;
+}
+
+/* Reset Button  */
 .reset-btn {
   background: #dc3545;
   color: white;
@@ -340,9 +383,14 @@
   background: #c82333;
 }
 
+.reset-btn:focus {
+  outline: 2px solid #a71d2a;
+  outline-offset: 2px;
+}
+
 /* User ID Input */
 .user-id-container {
-  background: white;
+  background: #ffffff;
   border-radius: 12px;
   padding: 3rem;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
@@ -352,7 +400,7 @@
 }
 
 .user-id-container h2 {
-  color: #2c3e50;
+  color: #1e3a24;
   margin-bottom: 1.5rem;
 }
 
@@ -365,19 +413,22 @@
 .user-id-field {
   flex: 1;
   padding: 12px 16px;
-  border: 2px solid #ddd;
+  border: 2px solid #d4c9a6;
   border-radius: 6px;
   font-size: 1rem;
   transition: border-color 0.3s ease;
+  background: #fefefe;
+  color: #2d2d2d;
 }
 
 .user-id-field:focus {
   outline: none;
-  border-color: #4a6fa5;
+  border-color: #2c5530;
+  box-shadow: 0 0 0 3px rgba(44, 85, 48, 0.1);
 }
 
 .user-id-submit {
-  background: #4a6fa5;
+  background: #2c5530;
   color: white;
   border: none;
   padding: 12px 24px;
@@ -386,10 +437,16 @@
   font-weight: 600;
   font-size: 1rem;
   transition: background 0.3s ease;
+  border: 2px solid transparent;
 }
 
 .user-id-submit:hover {
-  background: #3a5a80;
+  background: #1e3a24;
+}
+
+.user-id-submit:focus {
+  outline: 2px solid #4a7c59;
+  outline-offset: 2px;
 }
 
 .user-id-note {
@@ -399,12 +456,32 @@
 }
 
 .user-id-display {
-  background: #e9f7fe;
+  background: #edf5ee; 
   padding: 10px 20px;
   border-radius: 6px;
   margin-bottom: 2rem;
-  color: #2c3e50;
+  color: #1e3a24;
   font-size: 1.1rem;
+  border: 1px solid #d4e2d6;
+}
+
+/* Problem context text */
+.problem-context {
+  color: #555;
+  font-size: 0.95rem;
+  margin-bottom: 1.5rem;
+  padding: 0.5rem;
+  background: #f5f2e9;
+  border-radius: 4px;
+  border-left: 3px solid #2c5530;
+}
+
+/* Focus indicators for all interactive elements */
+button:focus,
+input:focus,
+[role="button"]:focus {
+  outline: 2px solid #2c5530;
+  outline-offset: 2px;
 }
 
 /* Responsive */
@@ -430,7 +507,27 @@
   }
   
   .export-btn,
-  .reset-btn {
+  .reset-btn,
+  .new-data-btn {
     width: 100%;
+  }
+}
+
+
+@media (prefers-contrast: high) {
+  .App-header {
+    background: #1a1a1a;
+    color: #ffffff;
+  }
+  
+  .category-card,
+  .subcategory-card,
+  .subsubcategory-card,
+  .questions-container {
+    border: 2px solid #000000;
+  }
+  
+  .question-group {
+    border-left: 4px solid #000000;
   }
 }

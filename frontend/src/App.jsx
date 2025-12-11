@@ -175,7 +175,7 @@ function App() {
     if (isValidId) {
       setShowUserIdInput(false);
     } else {
-      alert('Asmens kodas turi būti tiksliai 11 skaitmenų');
+      alert('ID number should contain 11 digits');
     }
   };
 
@@ -253,7 +253,7 @@ function App() {
     if (showUserIdInput) {
       return (
         <div className="user-id-container">
-          <h2>Įveskite Asmens Kodą</h2>
+          <h2>Enter the ID number</h2>
           <div className="user-id-input">
             <input
               type="text"
@@ -264,15 +264,15 @@ function App() {
                   setUserId(value);
                 }
               }}
-              placeholder="Įveskite asmens kodą (11 skaitmenų)"
+              placeholder="Enter the ID number (11 digits)"
               className="user-id-field"
               maxLength="11"
             />
             <button className="user-id-submit" onClick={handleUserIdSubmit}>
-              Pradėti →
+              Continue →
             </button>
           </div>
-          <p className="user-id-note">Asmens kodas turi būti tiksliai 11 skaitmenų</p>
+          <p className="user-id-note">The ID number has to be 11 digits long</p>
         </div>
       );
     }
@@ -281,7 +281,7 @@ function App() {
       return (
         <div className="categories-container">
           <h2>Select a Domain</h2>
-          <p className="user-id-display">Asmens kodas: <strong>{userId}</strong></p>
+          <p className="user-id-display">ID number: <strong>{userId}</strong></p>
           <div className="categories-grid">
             {omahaDomains.map(domain => (
               <div 
@@ -291,7 +291,7 @@ function App() {
               >
                 <h3>{domain.name}</h3>
                 <p>{domain.description}</p>
-                <div className="select-btn">Toliau</div>
+                <div className="select-btn">Next</div>
               </div>
             ))}
           </div>
@@ -304,7 +304,7 @@ function App() {
       return (
         <div className="subcategories-container">
           <button className="back-btn" onClick={() => setCurrentDomain(null)}>
-            ← Atgal
+            ← Back
           </button>
           <h2>{domain?.name}</h2>
           <p className="category-description">{domain?.description}</p>
@@ -318,7 +318,7 @@ function App() {
               >
                 <h3>{problem.name}</h3>
                 <p>{problem.description}</p>
-                <div className="select-btn">Toliau</div>
+                <div className="select-btn">Next</div>
               </div>
             ))}
           </div>
@@ -332,7 +332,7 @@ function App() {
       return (
         <div className="subsubcategories-container">
           <button className="back-btn" onClick={() => setCurrentProblem(null)}>
-            ← Atgal
+            ← Back
           </button>
           <h2>{problem?.name}</h2>
           <p className="category-description">{problem?.description}</p>
@@ -346,7 +346,7 @@ function App() {
               >
                 <h3>{symptom.name}</h3>
                 <p>{symptom.description}</p>
-                <div className="select-btn">Toliau</div>
+                <div className="select-btn">Next</div>
               </div>
             ))}
           </div>
@@ -361,7 +361,7 @@ function App() {
       return (
         <div className="questions-container">
           <button className="back-btn" onClick={() => setCurrentSymptom(null)}>
-            ← Atgal
+            ← Back
           </button>
           
           <h2>{symptom?.name}</h2>
@@ -501,7 +501,7 @@ function App() {
     <div className="App">
       <header className="App-header">
         <h1>Omaha System Health Assessment</h1>
-        <p>Complete assessment for all four Omaha System domains</p>
+        <p>Patient health assesment and intervention planning</p>
       </header>
 
       <main className="App-main">
@@ -510,11 +510,11 @@ function App() {
         {!showUserIdInput && (
           <div className="action-buttons">
             <button className="export-btn" onClick={handleSubmit}>
-              Eksportuoti
+              Export
             </button>
             <div className="button-gap"></div>
             <button className="new-data-btn" onClick={() => setShowUserIdInput(true)}>
-              Įvesti kito duomenis
+              Enter another persons data
             </button>
             <div className="button-gap"></div>
             <button className="reset-btn" onClick={handleReset}>
