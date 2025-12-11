@@ -122,17 +122,29 @@ class ClientPII(SQLModel, table=True):
     client: "Client" = Relationship(back_populates="pii")
 
 
+class ConsentDefinition(SQLModel, table=True):
+    __tablename__ = "consent_definition"  # type: ignore
+    consent_definition_id: int | None = Field(default=None, primary_key=True)
+    consent_code: str = Field(unique=True)
+    consent_title: str
+    consent_description: str | None = None
+    is_mandatory: bool = Field(default=False)
+
+
 class ClientConsent(SQLModel, table=True):
     __tablename__ = "client_consent"  # type: ignore
     consent_id: int | None = Field(default=None, primary_key=True)
     client_id: int = Field(foreign_key="client.client_id")
-    consent_type: str
+    consent_definition_id: int = Field(
+        foreign_key="consent_definition.consent_definition_id"
+    )
     has_consented: bool
     ip_address: str | None = None
     granted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     revoked_at: datetime | None = None
 
     client: "Client" = Relationship(back_populates="consents")
+    definition: ConsentDefinition = Relationship()
 
 
 class Client(SQLModel, table=True):

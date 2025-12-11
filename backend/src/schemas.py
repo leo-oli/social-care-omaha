@@ -74,14 +74,26 @@ class OutcomeRatingRead(SQLModel):
 # ==========================================
 
 
+class ConsentDefinitionRead(SQLModel):
+    consent_definition_id: int
+    consent_code: str
+    consent_title: str
+    consent_description: str | None
+    is_mandatory: bool
+
+
+class ClientConsentCreate(SQLModel):
+    consent_definition_id: int
+    has_consented: bool
+
+
 class ClientCreate(SQLModel):
     first_name: str
     last_name: str
     date_of_birth: date
     email: EmailStr | None = None
     address: str | None = None
-    consent_type: str
-    has_consented: bool
+    consents: list[ClientConsentCreate]
 
 
 class ClientRead(SQLModel):

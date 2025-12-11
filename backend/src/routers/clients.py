@@ -11,6 +11,7 @@ from ..models import (
     Client,
     ClientPII,
     ClientConsent,
+    ConsentDefinition,
 )
 from ..services.encryption import decrypt_data, encrypt_data
 from ..schemas import (
@@ -41,6 +42,22 @@ def get_clients(session: Session = Depends(get_session)):
 @router.post("", response_model=ClientReadDetails, status_code=status.HTTP_201_CREATED)
 def create_client(client_data: ClientCreate, session: Session = Depends(get_session)):
     try:
+        # Validate consents
+        definitions = session.exec(select(ConsentDefinition)).all()
+        mandatory_ids = {d.consent_definition_id for d in definitions if d.is_mandatory}
+        provided_consents = {
+            c.consent_definition_id: c.has_consented for c in client_data.consents
+        }
+
+        for mid in mandatory_ids:
+            if mid is None:
+                raise ValueError("Consent definition IDs should not contain None.")
+            if provided_consents.get(mid) is not True:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Mandatory consent {mid} missing or denied.",
+                )
+
         pii_data = {
             "first_name": encrypt_data(client_data.first_name),
             "last_name": encrypt_data(client_data.last_name),
@@ -60,13 +77,18 @@ def create_client(client_data: ClientCreate, session: Session = Depends(get_sess
             )
 
         new_pii = ClientPII(client_id=new_client.client_id, **pii_data)
-        new_consent = ClientConsent(
-            client_id=new_client.client_id,
-            consent_type=client_data.consent_type,
-            has_consented=client_data.has_consented,
-        )
 
-        session.add_all([new_pii, new_consent])
+        consent_objects = []
+        for c in client_data.consents:
+            consent_objects.append(
+                ClientConsent(
+                    client_id=new_client.client_id,
+                    consent_definition_id=c.consent_definition_id,
+                    has_consented=c.has_consented,
+                )
+            )
+
+        session.add_all([new_pii] + consent_objects)
         session.commit()
         session.refresh(new_client)
         session.refresh(new_pii)
@@ -122,6 +144,28 @@ def update_client_pii(
             status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
         )
 
+    # Validate mandatory consents
+    definitions = session.exec(select(ConsentDefinition)).all()
+    valid_ids = {d.consent_definition_id for d in definitions}
+    mandatory_ids = {d.consent_definition_id for d in definitions if d.is_mandatory}
+    provided_consents = {
+        c.consent_definition_id: c.has_consented for c in client_data.consents
+    }
+
+    for cid in provided_consents:
+        if cid not in valid_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid consent definition ID: {cid}",
+            )
+
+    for mid in mandatory_ids:
+        if mid in provided_consents and provided_consents[mid] is False:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Mandatory consent {mid} cannot be revoked.",
+            )
+
     pii = session.exec(
         select(ClientPII).where(ClientPII.client_id == client_id)
     ).first()
@@ -138,9 +182,44 @@ def update_client_pii(
     pii.address = client_data.address
 
     session.add(pii)
+
+    # Handle Consents Update
+    existing_consents = session.exec(
+        select(ClientConsent).where(ClientConsent.client_id == client_id)
+    ).all()
+    existing_consents_map = {c.consent_definition_id: c for c in existing_consents}
+
+    for consent_data in client_data.consents:
+        cid = consent_data.consent_definition_id
+        has_consented = consent_data.has_consented
+
+        if cid in existing_consents_map:
+            existing_consent = existing_consents_map[cid]
+            if existing_consent.has_consented != has_consented:
+                existing_consent.has_consented = has_consented
+                if has_consented:
+                    existing_consent.granted_at = datetime.now(timezone.utc)
+                    existing_consent.revoked_at = None
+                else:
+                    existing_consent.revoked_at = datetime.now(timezone.utc)
+                session.add(existing_consent)
+        else:
+            new_consent = ClientConsent(
+                client_id=client_id,
+                consent_definition_id=cid,
+                has_consented=has_consented,
+                granted_at=datetime.now(timezone.utc),
+                revoked_at=datetime.now(timezone.utc) if not has_consented else None,
+            )
+            session.add(new_consent)
+
     session.commit()
     session.refresh(pii)
     session.refresh(client)
+
+    # Decrypt PII before returning
+    pii.first_name = decrypt_data(pii.first_name)
+    pii.last_name = decrypt_data(pii.last_name)
 
     client_details = client.model_dump()
     client_details.update(pii.model_dump())

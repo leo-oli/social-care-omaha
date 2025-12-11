@@ -14,6 +14,7 @@ from ..models import (
     OutcomeRatingStatus,
     OutcomeRatingKnowledge,
     OutcomeRatingBehavior,
+    ConsentDefinition,
 )
 from ..schemas import (
     OmahaDomainRead,
@@ -25,7 +26,9 @@ from ..schemas import (
     ModifierDomainRead,
     OutcomePhaseRead,
     OutcomeRatingRead,
+    ConsentDefinitionRead,
 )
+
 
 router = APIRouter(prefix="/static", tags=["static"])
 
@@ -98,3 +101,8 @@ def get_outcome_ratings(session: Session = Depends(get_session)):
         knowledge=list(knowledge_ratings),
         behavior=list(behavior_ratings),
     )
+
+
+@router.get("/consent-definitions", response_model=list[ConsentDefinitionRead])
+def get_consent_definitions(session: Session = Depends(get_session)):
+    return session.exec(select(ConsentDefinition)).all()

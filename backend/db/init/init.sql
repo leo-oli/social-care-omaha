@@ -103,6 +103,14 @@ CREATE TABLE outcome_rating_behavior (
     rating_behavior_description TEXT
 );
 
+CREATE TABLE consent_definition (
+    consent_definition_id INTEGER PRIMARY KEY,
+    consent_code TEXT NOT NULL UNIQUE,
+    consent_title TEXT NOT NULL,
+    consent_description TEXT,
+    is_mandatory INTEGER DEFAULT 0
+);
+
 -- ----------------------------------------------------------------------------
 -- 2.2 DYNAMIC DATA TABLES (GDPR Compliant)
 -- ----------------------------------------------------------------------------
@@ -135,12 +143,13 @@ CREATE TABLE client_pii (
 CREATE TABLE client_consent (
     consent_id INTEGER PRIMARY KEY AUTOINCREMENT,
     client_id INTEGER NOT NULL,
-    consent_type TEXT NOT NULL, -- e.g. 'DATA_PROCESSING'
+    consent_definition_id INTEGER NOT NULL, 
     has_consented INTEGER NOT NULL, 
     ip_address TEXT,
     granted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     revoked_at DATETIME DEFAULT NULL,
-    FOREIGN KEY (client_id) REFERENCES client(client_id) ON DELETE CASCADE
+    FOREIGN KEY (client_id) REFERENCES client(client_id) ON DELETE CASCADE,
+    FOREIGN KEY (consent_definition_id) REFERENCES consent_definition(consent_definition_id)
 );
 
 -- Client Problem (The Anchor)
@@ -931,5 +940,9 @@ INSERT INTO outcome_rating_behavior (rating_behavior_id, rating_behavior_label, 
 (3, 'Inconsistently appropriate behavior', 'Client exhibits observable responses, actions, or activities that are inconsistently appropriate for the occasion or purpose'),
 (4, 'Usually appropriate behavior', 'Client exhibits observable responses, actions, or activities that are usually appropriate for the occasion or purpose'),
 (5, 'Consistently appropriate behavior', 'Client exhibits observable responses, actions, or activities that are consistently appropriate for the occasion or purpose');
+
+INSERT INTO consent_definition (consent_definition_id, consent_code, consent_title, consent_description, is_mandatory) VALUES 
+(1, 'DATA_PROCESSING_HEALTH', 'Health Data Processing', 'I agree to the processing of my health data for the purpose of nursing care documentation', 1),
+(2, 'RESEARCH_AND_STATISTICS', 'Research & Statistics', 'I agree that my anonymized data may be used for nursing quality research', 0);
 
 COMMIT;
