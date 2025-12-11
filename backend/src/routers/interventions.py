@@ -1,32 +1,51 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 
 from ..database import get_session
 from ..models import (
     CareIntervention,
     ClientProblem,
-    InterventionTarget,
     InterventionCategory,
+    InterventionTarget,
 )
 from ..schemas import CareInterventionCreate
 
-router = APIRouter(prefix="/interventions", tags=["interventions"])
+router = APIRouter(prefix="/clients", tags=["interventions"])
 
 
-@router.post("", response_model=CareIntervention)
-def create_intervention(
-    intervention_data: CareInterventionCreate, session: Session = Depends(get_session)
+@router.post(
+    "/{client_id}/problems/{client_problem_id}/interventions",
+    status_code=status.HTTP_201_CREATED,
+)
+def create_care_intervention(
+    client_id: int,
+    client_problem_id: int,
+    intervention_data: CareInterventionCreate,
+    session: Session = Depends(get_session),
 ):
-    # Check if client problem and target exist
-    if not session.get(ClientProblem, intervention_data.client_problem_id):
-        raise HTTPException(status_code=404, detail="Client Problem not found")
-    if not session.get(InterventionTarget, intervention_data.target_id):
-        raise HTTPException(status_code=404, detail="Intervention Target not found")
-    if not session.get(InterventionCategory, intervention_data.category_id):
-        raise HTTPException(status_code=404, detail="Intervention Category not found")
+    problem = session.get(ClientProblem, client_problem_id)
+    if not problem or problem.client_id != client_id or problem.deleted_at:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Client problem not found"
+        )
 
-    intervention = CareIntervention.model_validate(intervention_data)
-    session.add(intervention)
+    # Validate foreign keys
+    category = session.get(InterventionCategory, intervention_data.category_id)
+    if not category:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Intervention category not found"
+        )
+
+    target = session.get(InterventionTarget, intervention_data.target_id)
+    if not target:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Intervention target not found"
+        )
+
+    new_intervention = CareIntervention(
+        client_problem_id=client_problem_id, **intervention_data.model_dump()
+    )
+    session.add(new_intervention)
     session.commit()
-    session.refresh(intervention)
-    return intervention
+    session.refresh(new_intervention)
+    return new_intervention

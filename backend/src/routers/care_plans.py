@@ -1,16 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
+from sqlalchemy.orm import selectinload
+from sqlalchemy import desc
 
 from ..database import get_session
-from ..models import Client, ClientProblem, OutcomeScore, CareIntervention
-from sqlalchemy import desc
-from ..schemas import (
-    CarePlan,
-    ClientProblemRead,
-    OutcomeScoreRead,
-    CareInterventionRead,
-    ClientProblemSymptomRead,
-)
+from ..models import (
+    CareIntervention,
+    Client,
+    ClientProblem,
+    ClientProblemSymptom,
+    OutcomeScore,
+)  # type: ignore
+from ..schemas import CarePlan, ClientProblemReadWithDetails, ClientRead
 
 router = APIRouter(prefix="/clients", tags=["care-plans"])
 
@@ -19,53 +20,44 @@ router = APIRouter(prefix="/clients", tags=["care-plans"])
 def get_care_plan(client_id: int, session: Session = Depends(get_session)):
     client = session.get(Client, client_id)
     if not client or client.deleted_at:
-        raise HTTPException(status_code=404, detail="Client not found")
-
-    # Get active problems for the client
-    active_problems_db = session.exec(
-        select(ClientProblem).where(
-            ClientProblem.client_id == client_id, ClientProblem.active
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
         )
-    ).all()
 
-    care_plan_problems = []
-    for cp in active_problems_db:
-        # Get the latest score for each problem
-        latest_score_db = session.exec(
+    # Eagerly load related data to avoid N+1 queries
+    problems_query = (
+        select(ClientProblem)
+        .options(
+            selectinload(ClientProblem.problem),  # type: ignore
+            selectinload(ClientProblem.modifier_domain),  # type: ignore
+            selectinload(ClientProblem.modifier_type),  # type: ignore
+            selectinload(ClientProblem.selected_symptoms).selectinload(  # type: ignore
+                ClientProblemSymptom.symptom  # type: ignore
+            ),
+            selectinload(ClientProblem.interventions).selectinload(  # type: ignore
+                CareIntervention.category  # type: ignore
+            ),
+            selectinload(ClientProblem.interventions).selectinload(  # type: ignore
+                CareIntervention.target  # type: ignore
+            ),
+        )
+        .where(ClientProblem.client_id == client_id)
+        .where(ClientProblem.is_active)
+        .where(ClientProblem.deleted_at == None)  # noqa: E711
+    )
+    active_problems_db = session.exec(problems_query).all()
+
+    active_problems_with_details = []
+    for problem in active_problems_db:
+        latest_score = session.exec(
             select(OutcomeScore)
-            .where(OutcomeScore.client_problem_id == cp.client_problem_id)
+            .where(OutcomeScore.client_problem_id == problem.client_problem_id)
             .order_by(desc(OutcomeScore.date_recorded))  # type: ignore
         ).first()
 
-        latest_score_read = (
-            OutcomeScoreRead.model_validate(latest_score_db)
-            if latest_score_db
-            else None
-        )
+        problem_details = ClientProblemReadWithDetails.model_validate(problem)
+        problem_details.latest_score = latest_score  # type: ignore
+        active_problems_with_details.append(problem_details)
 
-        # Get interventions for each problem
-        interventions_db = session.exec(
-            select(CareIntervention).where(
-                CareIntervention.client_problem_id == cp.client_problem_id
-            )
-        ).all()
-
-        if cp.client_problem_id is not None:
-            problem_read = ClientProblemRead(
-                client_problem_id=cp.client_problem_id,
-                problem=cp.problem,
-                modifier_domain=cp.modifier_domain,
-                modifier_type=cp.modifier_type,
-                selected_symptoms=[
-                    ClientProblemSymptomRead.model_validate(s)
-                    for s in cp.selected_symptoms
-                ],
-                active=cp.active,
-                latest_score=latest_score_read,
-                interventions=[
-                    CareInterventionRead.model_validate(i) for i in interventions_db
-                ],
-            )
-            care_plan_problems.append(problem_read)
-
-    return CarePlan(client=client, active_problems=care_plan_problems)
+    client_read = ClientRead.model_validate(client)
+    return CarePlan(client=client_read, active_problems=active_problems_with_details)

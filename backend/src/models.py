@@ -1,6 +1,7 @@
 import uuid
 from datetime import date, datetime, timezone
 
+from pydantic import EmailStr
 from sqlmodel import Field, Relationship, SQLModel, Column, DateTime
 
 # ==========================================
@@ -110,7 +111,7 @@ class ClientPII(SQLModel, table=True):
     first_name: str  # Note: Handle encryption in application logic
     last_name: str  # Note: Handle encryption in application logic
     date_of_birth: date
-    email: str | None = None
+    email: EmailStr | None = None
     address: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime | None = Field(
@@ -158,7 +159,7 @@ class ClientProblem(SQLModel, table=True):
     problem_id: int = Field(foreign_key="omaha_problem.problem_id")
     modifier_domain_id: int = Field(foreign_key="modifier_domain.modifier_domain_id")
     modifier_type_id: int = Field(foreign_key="modifier_type.modifier_type_id")
-    active: bool = Field(default=True)
+    is_active: bool = Field(default=True)
 
     # Audit timestamps
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -185,9 +186,10 @@ class ClientProblem(SQLModel, table=True):
 
 class ClientProblemSymptom(SQLModel, table=True):
     __tablename__ = "client_problem_symptom"  # type: ignore
-    id: int | None = Field(default=None, primary_key=True)
+    client_problem_symptom_id: int | None = Field(default=None, primary_key=True)
     client_problem_id: int = Field(foreign_key="client_problem.client_problem_id")
     symptom_id: int = Field(foreign_key="symptom.symptom_id")
+    symptom_comment: str | None = None
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime | None = Field(
