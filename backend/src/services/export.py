@@ -28,6 +28,9 @@ def generate_care_plan_summary_text(
     last_name = decrypt_data(pii.last_name)
     client_name = f"{first_name} {last_name}"
     dob = pii.date_of_birth
+    tin = pii.tin
+    address = pii.address
+    phone_number = pii.phone_number
     generation_date = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     lines = [
@@ -35,6 +38,9 @@ def generate_care_plan_summary_text(
         "--------------------------------------------------",
         f"Client: {client_name}",
         f"DOB: {dob}",
+        f"TIN: {tin}",
+        f"Phone: {phone_number}",
+        f"Address: {address}",
         f"Generated: {generation_date}",
         "--------------------------------------------------",
         "",

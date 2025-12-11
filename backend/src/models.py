@@ -1,7 +1,6 @@
 import uuid
 from datetime import date, datetime, timezone
 
-from pydantic import EmailStr
 from sqlmodel import Field, Relationship, SQLModel, Column, DateTime
 
 # ==========================================
@@ -111,7 +110,8 @@ class ClientPII(SQLModel, table=True):
     first_name: str  # Note: Handle encryption in application logic
     last_name: str  # Note: Handle encryption in application logic
     date_of_birth: date
-    email: EmailStr | None = None
+    tin: str = Field(unique=True, max_length=11)
+    phone_number: str | None = None
     address: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime | None = Field(

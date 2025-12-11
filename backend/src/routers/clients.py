@@ -62,7 +62,8 @@ def create_client(client_data: ClientCreate, session: Session = Depends(get_sess
             "first_name": encrypt_data(client_data.first_name),
             "last_name": encrypt_data(client_data.last_name),
             "date_of_birth": client_data.date_of_birth,
-            "email": client_data.email,
+            "tin": client_data.tin,
+            "phone_number": client_data.phone_number,
             "address": client_data.address,
         }
 
@@ -178,8 +179,9 @@ def update_client_pii(
     pii.first_name = encrypt_data(client_data.first_name)  # ENCRYPT
     pii.last_name = encrypt_data(client_data.last_name)  # ENCRYPT
     pii.date_of_birth = client_data.date_of_birth
-    pii.email = client_data.email
+    pii.phone_number = client_data.phone_number
     pii.address = client_data.address
+    pii.tin = client_data.tin
 
     session.add(pii)
 
@@ -245,7 +247,7 @@ def delete_client(client_id: int, session: Session = Depends(get_session)):
         # Soft-deleting PII is a business decision. Here we nullify fields.
         pii.first_name = "DELETED"
         pii.last_name = "DELETED"
-        pii.email = None
+        pii.phone_number = None
         pii.address = None
         session.add(pii)
 

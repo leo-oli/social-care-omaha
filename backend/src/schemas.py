@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from pydantic import EmailStr
+from pydantic import field_validator
 from sqlmodel import SQLModel
 from .models import (
     OmahaProblem,
@@ -91,8 +91,17 @@ class ClientCreate(SQLModel):
     first_name: str
     last_name: str
     date_of_birth: date
-    email: EmailStr | None = None
+    phone_number: str | None = None
     address: str | None = None
+    tin: str
+
+    @field_validator("tin")
+    @classmethod
+    def validate_tin(cls, v: str) -> str:
+        if not v.isdigit() or len(v) != 11:
+            raise ValueError("TIN must be exactly 11 digits")
+        return v
+
     consents: list[ClientConsentCreate]
 
 
@@ -104,6 +113,7 @@ class ClientRead(SQLModel):
 class ClientReadDetails(SQLModel):
     client_id: int
     client_uuid: str
+    tin: str
     is_active: bool
     created_at: datetime
     updated_at: datetime | None
@@ -112,7 +122,7 @@ class ClientReadDetails(SQLModel):
     first_name: str
     last_name: str
     date_of_birth: date
-    email: EmailStr | None
+    phone_number: str | None
     address: str | None
 
 

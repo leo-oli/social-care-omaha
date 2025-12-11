@@ -132,7 +132,8 @@ CREATE TABLE client_pii (
     first_name TEXT NOT NULL, -- Application must Encrypt
     last_name TEXT NOT NULL,  -- Application must Encrypt
     date_of_birth TEXT NOT NULL,
-    email TEXT,
+    tin TEXT NOT NULL UNIQUE,
+    phone_number TEXT,
     address TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
