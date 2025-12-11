@@ -15,9 +15,9 @@ from ..models import (
     ModifierType,
     OutcomeScore,
 )
+from ..encryption import decrypt_data, encrypt_data
 from ..schemas import (
     ClientCreate,
-    ClientRead,
     ClientReadDetails,
     ClientProblemCreate,
     ClientProblemRead,
@@ -29,20 +29,29 @@ from ..schemas import (
 router = APIRouter(prefix="/clients", tags=["clients"])
 
 
-@router.get("", response_model=list[ClientRead])
+@router.get("", response_model=list[ClientReadDetails])
 def get_clients(session: Session = Depends(get_session)):
     clients = session.exec(select(Client).where(Client.deleted_at == None)).all()  # noqa: E711
-    return clients
+    client_details_list = []
+    for client in clients:
+        pii = session.exec(
+            select(ClientPII).where(ClientPII.client_id == client.client_id)
+        ).first()
+        if pii:
+            pii.first_name = decrypt_data(pii.first_name)
+            pii.last_name = decrypt_data(pii.last_name)
+            client_details = client.model_dump()
+            client_details.update(pii.model_dump())
+            client_details_list.append(ClientReadDetails(**client_details))
+    return client_details_list
 
 
-@router.post("", response_model=ClientRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ClientReadDetails, status_code=status.HTTP_201_CREATED)
 def create_client(client_data: ClientCreate, session: Session = Depends(get_session)):
     try:
-        # Note: PII encryption should happen here before creating the ClientPII object.
-        # For now, we'll store it as plain text and add a comment.
         pii_data = {
-            "first_name": client_data.first_name,  # ENCRYPT THIS
-            "last_name": client_data.last_name,  # ENCRYPT THIS
+            "first_name": encrypt_data(client_data.first_name),
+            "last_name": encrypt_data(client_data.last_name),
             "date_of_birth": client_data.date_of_birth,
             "email": client_data.email,
             "address": client_data.address,
@@ -50,7 +59,7 @@ def create_client(client_data: ClientCreate, session: Session = Depends(get_sess
 
         new_client = Client()
         session.add(new_client)
-        session.flush()  # Flush to get the new_client.client_id
+        session.flush()
 
         if new_client.client_id is None:
             raise HTTPException(
@@ -68,8 +77,15 @@ def create_client(client_data: ClientCreate, session: Session = Depends(get_sess
         session.add_all([new_pii, new_consent])
         session.commit()
         session.refresh(new_client)
+        session.refresh(new_pii)
 
-        return new_client
+        new_pii.first_name = decrypt_data(new_pii.first_name)
+        new_pii.last_name = decrypt_data(new_pii.last_name)
+
+        client_details = new_client.model_dump()
+        client_details.update(new_pii.model_dump())
+
+        return ClientReadDetails(**client_details)
     except Exception as e:
         session.rollback()
         raise HTTPException(
@@ -93,6 +109,10 @@ def get_client_details(client_id: int, session: Session = Depends(get_session)):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Client PII not found"
         )
+
+    # Decrypt PII before returning
+    pii.first_name = decrypt_data(pii.first_name)
+    pii.last_name = decrypt_data(pii.last_name)
 
     # Combine the two models into the response
     client_details = client.model_dump()
@@ -119,8 +139,8 @@ def update_client_pii(
         )
 
     # Note: PII encryption should happen here
-    pii.first_name = client_data.first_name  # ENCRYPT
-    pii.last_name = client_data.last_name  # ENCRYPT
+    pii.first_name = encrypt_data(client_data.first_name)  # ENCRYPT
+    pii.last_name = encrypt_data(client_data.last_name)  # ENCRYPT
     pii.date_of_birth = client_data.date_of_birth
     pii.email = client_data.email
     pii.address = client_data.address
@@ -331,6 +351,9 @@ def export_client_data(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Client PII not found for export",
             )
+
+        pii.first_name = decrypt_data(pii.first_name)
+        pii.last_name = decrypt_data(pii.last_name)
 
         content = f"Client Export: {pii.first_name} {pii.last_name}\n"
         content += f"DOB: {pii.date_of_birth}\n"

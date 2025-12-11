@@ -165,7 +165,7 @@ CREATE TABLE client_problem_symptom (
     client_problem_symptom_id INTEGER PRIMARY KEY AUTOINCREMENT,
     client_problem_id INTEGER NOT NULL,
     symptom_id INTEGER NOT NULL,
-    other_comment TEXT,
+    symptom_comment TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     deleted_at DATETIME DEFAULT NULL,

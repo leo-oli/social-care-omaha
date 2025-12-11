@@ -3,6 +3,8 @@ services:
         build:
             context: .
             target: dev  # prod
+        environment:
+            ENCRYPTION_KEY: ${ENCRYPTION_KEY}
         ports:
             - 8000:8000
         volumes:
