@@ -1,49 +1,112 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 
 from ..database import get_session
 from ..models import (
     OmahaDomain,
     OmahaProblem,
+    Symptom,
     InterventionCategory,
     InterventionTarget,
-    ModifierStatus,
-    ModifierSubject,
+    ModifierType,
+    ModifierDomain,
+    OutcomePhase,
+    OutcomeRatingStatus,
+    OutcomeRatingKnowledge,
+    OutcomeRatingBehavior,
+    ConsentDefinition,
 )
+from ..schemas import (
+    OmahaDomainRead,
+    OmahaProblemRead,
+    SymptomRead,
+    InterventionCategoryRead,
+    InterventionTargetRead,
+    ModifierTypeRead,
+    ModifierDomainRead,
+    OutcomePhaseRead,
+    OutcomeRatingRead,
+    ConsentDefinitionRead,
+)
+
 
 router = APIRouter(prefix="/static", tags=["static"])
 
 
-@router.get("/domains", response_model=list[OmahaDomain])
+@router.get("/domains", response_model=list[OmahaDomainRead])
 def get_domains(session: Session = Depends(get_session)):
     return session.exec(select(OmahaDomain)).all()
 
 
-@router.get("/problems/{domain_id}", response_model=list[OmahaProblem])
-def get_problems_by_domain(domain_id: int, session: Session = Depends(get_session)):
-    problems = session.exec(
-        select(OmahaProblem).where(OmahaProblem.domain_id == domain_id)
-    ).all()
+@router.get("/problems", response_model=list[OmahaProblemRead])
+def get_problems(domain_id: int | None = None, session: Session = Depends(get_session)):
+    if domain_id:
+        problems = session.exec(
+            select(OmahaProblem).where(OmahaProblem.domain_id == domain_id)
+        ).all()
+    else:
+        problems = session.exec(select(OmahaProblem)).all()
     if not problems:
-        raise HTTPException(status_code=404, detail="No problems found for this domain")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No problems found"
+        )
     return problems
 
 
-@router.get("/targets", response_model=list[InterventionTarget])
-def get_targets(session: Session = Depends(get_session)):
-    return session.exec(select(InterventionTarget)).all()
+@router.get("/symptoms", response_model=list[SymptomRead])
+def get_all_symptoms(
+    problem_id: int | None = None, session: Session = Depends(get_session)
+):
+    if problem_id:
+        symptoms = session.exec(
+            select(Symptom).where(Symptom.problem_id == problem_id)
+        ).all()
+    else:
+        symptoms = session.exec(select(Symptom)).all()
+    if not symptoms:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No symptoms found"
+        )
+    return symptoms
 
 
-@router.get("/intervention-categories", response_model=list[InterventionCategory])
+@router.get("/modifier-domains", response_model=list[ModifierDomainRead])
+def get_modifier_domains(session: Session = Depends(get_session)):
+    return session.exec(select(ModifierDomain)).all()
+
+
+@router.get("/modifier-types", response_model=list[ModifierTypeRead])
+def get_modifier_types(session: Session = Depends(get_session)):
+    return session.exec(select(ModifierType)).all()
+
+
+@router.get("/intervention-categories", response_model=list[InterventionCategoryRead])
 def get_intervention_categories(session: Session = Depends(get_session)):
     return session.exec(select(InterventionCategory)).all()
 
 
-@router.get("/modifier-statuses", response_model=list[ModifierStatus])
-def get_modifier_statuses(session: Session = Depends(get_session)):
-    return session.exec(select(ModifierStatus)).all()
+@router.get("/intervention-targets", response_model=list[InterventionTargetRead])
+def get_intervention_targets(session: Session = Depends(get_session)):
+    return session.exec(select(InterventionTarget)).all()
 
 
-@router.get("/modifier-subjects", response_model=list[ModifierSubject])
-def get_modifier_subjects(session: Session = Depends(get_session)):
-    return session.exec(select(ModifierSubject)).all()
+@router.get("/outcome-phases", response_model=list[OutcomePhaseRead])
+def get_outcome_phases(session: Session = Depends(get_session)):
+    return session.exec(select(OutcomePhase)).all()
+
+
+@router.get("/outcome-ratings", response_model=OutcomeRatingRead)
+def get_outcome_ratings(session: Session = Depends(get_session)):
+    status_ratings = session.exec(select(OutcomeRatingStatus)).all()
+    knowledge_ratings = session.exec(select(OutcomeRatingKnowledge)).all()
+    behavior_ratings = session.exec(select(OutcomeRatingBehavior)).all()
+    return OutcomeRatingRead(
+        status=list(status_ratings),
+        knowledge=list(knowledge_ratings),
+        behavior=list(behavior_ratings),
+    )
+
+
+@router.get("/consent-definitions", response_model=list[ConsentDefinitionRead])
+def get_consent_definitions(session: Session = Depends(get_session)):
+    return session.exec(select(ConsentDefinition)).all()
