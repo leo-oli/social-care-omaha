@@ -1,22 +1,39 @@
+# Create/update root .gitignore with these MINIMAL essentials:
+@"
+# Dependencies
+node_modules/
+venv/
+.venv/
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.js
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
 
-# testing
-/coverage
-
-# production
-/build
-
-# misc
-.DS_Store
+# Environment
+.env
 .env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*.local
 
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+"@ | Out-File -FilePath .gitignore -Encoding UTF8
+
+# Also ensure frontend/.gitignore exists
+cd frontend
+@"
+node_modules/
+build/
+dist/
+.env*
+*.log
+"@ | Out-File -FilePath .gitignore -Encoding UTF8
+
+cd ..
