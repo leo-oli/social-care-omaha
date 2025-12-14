@@ -8,25 +8,25 @@ from .encryption import decrypt_data
 
 
 def generate_care_plan_summary_text(
-    client_id: int, db: Session
+    patient_id: int, db: Session
 ) -> tuple[str, str | None]:
     """
-    Generates a plain text summary of a client's care plan.
-    Returns the summary text and the client's full name.
+    Generates a plain text summary of a patient's care plan.
+    Returns the summary text and the patient's full name.
     """
-    client = db.get(models.Client, client_id)
-    if not client:
-        return "Client not found.", None
+    patient = db.get(models.Patient, patient_id)
+    if not patient:
+        return "Patient not found.", None
 
     pii = db.exec(
-        select(models.ClientPII).where(models.ClientPII.client_id == client_id)
+        select(models.PatientPII).where(models.PatientPII.patient_id == patient_id)
     ).first()
     if not pii:
-        return "Client PII not found.", None
+        return "Patient PII not found.", None
 
     first_name = decrypt_data(pii.first_name)
     last_name = decrypt_data(pii.last_name)
-    client_name = f"{first_name} {last_name}"
+    patient_name = f"{first_name} {last_name}"
     dob = pii.date_of_birth
     tin = pii.tin
     address = pii.address
@@ -36,7 +36,7 @@ def generate_care_plan_summary_text(
     lines = [
         "OMAHA SYSTEM CARE PLAN SUMMARY",
         "--------------------------------------------------",
-        f"Client: {client_name}",
+        f"Patient: {patient_name}",
         f"DOB: {dob}",
         f"TIN: {tin}",
         f"Phone: {phone_number}",
@@ -47,9 +47,9 @@ def generate_care_plan_summary_text(
     ]
 
     active_problems = db.exec(
-        select(models.ClientProblem)
-        .where(models.ClientProblem.client_id == client_id)
-        .where(models.ClientProblem.is_active == True)  # noqa: E712
+        select(models.PatientProblem)
+        .where(models.PatientProblem.patient_id == patient_id)
+        .where(models.PatientProblem.is_active == True)  # noqa: E712
     ).all()
 
     for i, problem in enumerate(active_problems, 1):
@@ -65,9 +65,9 @@ def generate_care_plan_summary_text(
         )
 
         symptoms = db.exec(
-            select(models.ClientProblemSymptom).where(
-                models.ClientProblemSymptom.client_problem_id
-                == problem.client_problem_id
+            select(models.PatientProblemSymptom).where(
+                models.PatientProblemSymptom.patient_problem_id
+                == problem.patient_problem_id
             )
         ).all()
         symptom_names = []
@@ -86,7 +86,7 @@ def generate_care_plan_summary_text(
 
         latest_score = db.exec(
             select(models.OutcomeScore)
-            .where(models.OutcomeScore.client_problem_id == problem.client_problem_id)
+            .where(models.OutcomeScore.patient_problem_id == problem.patient_problem_id)
             .order_by(desc(models.OutcomeScore.date_recorded))  # type: ignore
         ).first()
 
@@ -120,7 +120,7 @@ def generate_care_plan_summary_text(
         recent_interventions = db.exec(
             select(models.CareIntervention)
             .where(
-                models.CareIntervention.client_problem_id == problem.client_problem_id
+                models.CareIntervention.patient_problem_id == problem.patient_problem_id
             )
             .order_by(desc(models.CareIntervention.date_performed))  # type: ignore
             .limit(5)
@@ -139,11 +139,11 @@ def generate_care_plan_summary_text(
 
         lines.append("")
 
-    return "\n".join(lines), client_name
+    return "\n".join(lines), patient_name
 
 
 def get_group_office_payload_mock(
-    client_uuid: str, summary_text: str
+    patient_uuid: str, summary_text: str
 ) -> Dict[str, Any]:
     """
     Generates a mock payload for Group Office integration.
@@ -154,7 +154,7 @@ def get_group_office_payload_mock(
         "payload_mock": {
             "external_system": "GroupOffice",
             "action": "create_note",
-            "linked_contact_uuid": client_uuid,
+            "linked_contact_uuid": patient_uuid,
             "note_title": "Omaha Care Plan Summary",
             "note_body": summary_text,
         },

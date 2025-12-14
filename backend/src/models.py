@@ -99,14 +99,14 @@ class OutcomeRatingBehavior(SQLModel, table=True):
 
 
 # ==========================================
-# 2. DYNAMIC TABLES (Client & Clinical Data)
+# 2. DYNAMIC TABLES (Patient & Clinical Data)
 # ==========================================
 
 
-class ClientPII(SQLModel, table=True):
-    __tablename__ = "client_pii"  # type: ignore
-    client_pii_id: int | None = Field(default=None, primary_key=True)
-    client_id: int = Field(foreign_key="client.client_id", unique=True)
+class PatientPII(SQLModel, table=True):
+    __tablename__ = "patient_pii"  # type: ignore
+    patient_pii_id: int | None = Field(default=None, primary_key=True)
+    patient_id: int = Field(foreign_key="patient.patient_id", unique=True)
     first_name: str  # Note: Handle encryption in application logic
     last_name: str  # Note: Handle encryption in application logic
     date_of_birth: date
@@ -119,7 +119,7 @@ class ClientPII(SQLModel, table=True):
         sa_column=Column(DateTime, onupdate=lambda: datetime.now(timezone.utc)),
     )
 
-    client: "Client" = Relationship(back_populates="pii")
+    patient: "Patient" = Relationship(back_populates="pii")
 
 
 class ConsentDefinition(SQLModel, table=True):
@@ -131,10 +131,10 @@ class ConsentDefinition(SQLModel, table=True):
     is_mandatory: bool = Field(default=False)
 
 
-class ClientConsent(SQLModel, table=True):
-    __tablename__ = "client_consent"  # type: ignore
+class PatientConsent(SQLModel, table=True):
+    __tablename__ = "patient_consent"  # type: ignore
     consent_id: int | None = Field(default=None, primary_key=True)
-    client_id: int = Field(foreign_key="client.client_id")
+    patient_id: int = Field(foreign_key="patient.patient_id")
     consent_definition_id: int = Field(
         foreign_key="consent_definition.consent_definition_id"
     )
@@ -143,14 +143,14 @@ class ClientConsent(SQLModel, table=True):
     granted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     revoked_at: datetime | None = None
 
-    client: "Client" = Relationship(back_populates="consents")
+    patient: "Patient" = Relationship(back_populates="consents")
     definition: ConsentDefinition = Relationship()
 
 
-class Client(SQLModel, table=True):
-    __tablename__ = "client"  # type: ignore
-    client_id: int | None = Field(default=None, primary_key=True)
-    client_uuid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True)
+class Patient(SQLModel, table=True):
+    __tablename__ = "patient"  # type: ignore
+    patient_id: int | None = Field(default=None, primary_key=True)
+    patient_uuid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True)
     is_active: bool = Field(default=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime | None = Field(
@@ -159,15 +159,15 @@ class Client(SQLModel, table=True):
     )
     deleted_at: datetime | None = None
 
-    pii: ClientPII | None = Relationship(back_populates="client")
-    consents: list["ClientConsent"] = Relationship(back_populates="client")
-    problems: list["ClientProblem"] = Relationship(back_populates="client")
+    pii: PatientPII | None = Relationship(back_populates="patient")
+    consents: list["PatientConsent"] = Relationship(back_populates="patient")
+    problems: list["PatientProblem"] = Relationship(back_populates="patient")
 
 
-class ClientProblem(SQLModel, table=True):
-    __tablename__ = "client_problem"  # type: ignore
-    client_problem_id: int | None = Field(default=None, primary_key=True)
-    client_id: int = Field(foreign_key="client.client_id")
+class PatientProblem(SQLModel, table=True):
+    __tablename__ = "patient_problem"  # type: ignore
+    patient_problem_id: int | None = Field(default=None, primary_key=True)
+    patient_id: int = Field(foreign_key="patient.patient_id")
     problem_id: int = Field(foreign_key="omaha_problem.problem_id")
     modifier_domain_id: int = Field(foreign_key="modifier_domain.modifier_domain_id")
     modifier_type_id: int = Field(foreign_key="modifier_type.modifier_type_id")
@@ -181,25 +181,25 @@ class ClientProblem(SQLModel, table=True):
     )
     deleted_at: datetime | None = None
 
-    client: Client = Relationship(back_populates="problems")
+    patient: Patient = Relationship(back_populates="problems")
     problem: OmahaProblem = Relationship()
     modifier_domain: ModifierDomain = Relationship()
     modifier_type: ModifierType = Relationship()
 
     # Relationships to child tables
-    selected_symptoms: list["ClientProblemSymptom"] = Relationship(
-        back_populates="client_problem"
+    selected_symptoms: list["PatientProblemSymptom"] = Relationship(
+        back_populates="patient_problem"
     )
-    scores: list["OutcomeScore"] = Relationship(back_populates="client_problem")
+    scores: list["OutcomeScore"] = Relationship(back_populates="patient_problem")
     interventions: list["CareIntervention"] = Relationship(
-        back_populates="client_problem"
+        back_populates="patient_problem"
     )
 
 
-class ClientProblemSymptom(SQLModel, table=True):
-    __tablename__ = "client_problem_symptom"  # type: ignore
-    client_problem_symptom_id: int | None = Field(default=None, primary_key=True)
-    client_problem_id: int = Field(foreign_key="client_problem.client_problem_id")
+class PatientProblemSymptom(SQLModel, table=True):
+    __tablename__ = "patient_problem_symptom"  # type: ignore
+    patient_problem_symptom_id: int | None = Field(default=None, primary_key=True)
+    patient_problem_id: int = Field(foreign_key="patient_problem.patient_problem_id")
     symptom_id: int = Field(foreign_key="symptom.symptom_id")
     symptom_comment: str | None = None
 
@@ -210,14 +210,14 @@ class ClientProblemSymptom(SQLModel, table=True):
     )
     deleted_at: datetime | None = None
 
-    client_problem: ClientProblem = Relationship(back_populates="selected_symptoms")
+    patient_problem: PatientProblem = Relationship(back_populates="selected_symptoms")
     symptom: Symptom = Relationship()
 
 
 class OutcomeScore(SQLModel, table=True):
     __tablename__ = "outcome_score"  # type: ignore
     score_id: int | None = Field(default=None, primary_key=True)
-    client_problem_id: int = Field(foreign_key="client_problem.client_problem_id")
+    patient_problem_id: int = Field(foreign_key="patient_problem.patient_problem_id")
 
     phase_id: int = Field(foreign_key="outcome_phase.phase_id")
     rating_status_id: int = Field(foreign_key="outcome_rating_status.rating_status_id")
@@ -236,7 +236,7 @@ class OutcomeScore(SQLModel, table=True):
     )
     deleted_at: datetime | None = None
 
-    client_problem: ClientProblem = Relationship(back_populates="scores")
+    patient_problem: PatientProblem = Relationship(back_populates="scores")
     phase: OutcomePhase = Relationship()
     status_rating: OutcomeRatingStatus = Relationship()
     knowledge_rating: OutcomeRatingKnowledge = Relationship()
@@ -246,7 +246,7 @@ class OutcomeScore(SQLModel, table=True):
 class CareIntervention(SQLModel, table=True):
     __tablename__ = "care_intervention"  # type: ignore
     intervention_id: int | None = Field(default=None, primary_key=True)
-    client_problem_id: int = Field(foreign_key="client_problem.client_problem_id")
+    patient_problem_id: int = Field(foreign_key="patient_problem.patient_problem_id")
 
     category_id: int = Field(foreign_key="intervention_category.category_id")
     target_id: int = Field(foreign_key="intervention_target.target_id")
@@ -260,6 +260,6 @@ class CareIntervention(SQLModel, table=True):
     )
     deleted_at: datetime | None = None
 
-    client_problem: ClientProblem = Relationship(back_populates="interventions")
+    patient_problem: PatientProblem = Relationship(back_populates="interventions")
     category: InterventionCategory = Relationship()
     target: InterventionTarget = Relationship()

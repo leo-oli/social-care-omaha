@@ -82,12 +82,12 @@ class ConsentDefinitionRead(SQLModel):
     is_mandatory: bool
 
 
-class ClientConsentCreate(SQLModel):
+class PatientConsentCreate(SQLModel):
     consent_definition_id: int
     has_consented: bool
 
 
-class ClientCreate(SQLModel):
+class PatientCreate(SQLModel):
     first_name: str
     last_name: str
     date_of_birth: date
@@ -102,23 +102,23 @@ class ClientCreate(SQLModel):
             raise ValueError("TIN must be exactly 11 digits")
         return v
 
-    consents: list[ClientConsentCreate]
+    consents: list[PatientConsentCreate]
 
 
-class ClientRead(SQLModel):
-    client_uuid: str
-    client_id: int
+class PatientRead(SQLModel):
+    patient_uuid: str
+    patient_id: int
 
 
-class ClientReadDetails(SQLModel):
-    client_id: int
-    client_uuid: str
+class PatientReadDetails(SQLModel):
+    patient_id: int
+    patient_uuid: str
     tin: str
     is_active: bool
     created_at: datetime
     updated_at: datetime | None
     deleted_at: datetime | None
-    client_pii_id: int
+    patient_pii_id: int
     first_name: str
     last_name: str
     date_of_birth: date
@@ -131,25 +131,25 @@ class ClientReadDetails(SQLModel):
 # ==========================================
 
 
-class ClientProblemCreate(SQLModel):
+class PatientProblemCreate(SQLModel):
     problem_id: int
     modifier_domain_id: int
     modifier_type_id: int
 
 
-class ClientProblemUpdate(SQLModel):
+class PatientProblemUpdate(SQLModel):
     is_active: bool
 
 
-class ClientProblemRead(SQLModel):
-    client_problem_id: int
+class PatientProblemRead(SQLModel):
+    patient_problem_id: int
     problem: OmahaProblemRead
     modifier_domain: ModifierDomainRead
     modifier_type: ModifierTypeRead
     is_active: bool
 
 
-class ClientProblemSymptomCreate(SQLModel):
+class PatientProblemSymptomCreate(SQLModel):
     symptom_id: int
     symptom_comment: str | None = None
 
@@ -180,8 +180,8 @@ class OutcomeScoreRead(SQLModel):
     date_recorded: datetime
 
 
-class ClientProblemSymptomRead(SQLModel):
-    client_problem_symptom_id: int
+class PatientProblemSymptomRead(SQLModel):
+    patient_problem_symptom_id: int
     symptom: SymptomRead
     symptom_comment: str | None
 
@@ -192,9 +192,9 @@ class CareInterventionRead(SQLModel):
     specific_details: str | None
 
 
-class ClientProblemReadWithDetails(SQLModel):
-    client_problem_id: int
-    client_id: int
+class PatientProblemReadWithDetails(SQLModel):
+    patient_problem_id: int
+    patient_id: int
     problem_id: int
     modifier_domain_id: int
     modifier_type_id: int
@@ -205,11 +205,11 @@ class ClientProblemReadWithDetails(SQLModel):
     problem: OmahaProblem
     modifier_domain: ModifierDomain
     modifier_type: ModifierType
-    selected_symptoms: list[ClientProblemSymptomRead] = []
+    selected_symptoms: list[PatientProblemSymptomRead] = []
     latest_score: OutcomeScoreRead | None = None
     interventions: list[CareInterventionRead] = []
 
 
 class CarePlan(SQLModel):
-    client: ClientRead
-    active_problems: list[ClientProblemReadWithDetails]
+    patient: PatientRead
+    active_problems: list[PatientProblemReadWithDetails]

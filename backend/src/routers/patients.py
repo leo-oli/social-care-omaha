@@ -8,45 +8,47 @@ from ..services.export import (
     get_group_office_payload_mock,
 )
 from ..models import (
-    Client,
-    ClientPII,
-    ClientConsent,
+    Patient,
+    PatientPII,
+    PatientConsent,
     ConsentDefinition,
 )
 from ..services.encryption import decrypt_data, encrypt_data
 from ..schemas import (
-    ClientCreate,
-    ClientReadDetails,
+    PatientCreate,
+    PatientReadDetails,
 )
 
-router = APIRouter(prefix="/clients", tags=["clients"])
+router = APIRouter(prefix="/patients", tags=["patients"])
 
 
-@router.get("", response_model=list[ClientReadDetails])
-def get_clients(session: Session = Depends(get_session)):
-    clients = session.exec(select(Client).where(Client.deleted_at == None)).all()  # noqa: E711
-    client_details_list = []
-    for client in clients:
+@router.get("", response_model=list[PatientReadDetails])
+def get_patients(session: Session = Depends(get_session)):
+    patients = session.exec(select(Patient).where(Patient.deleted_at == None)).all()  # noqa: E711
+    patient_details_list = []
+    for patient in patients:
         pii = session.exec(
-            select(ClientPII).where(ClientPII.client_id == client.client_id)
+            select(PatientPII).where(PatientPII.patient_id == patient.patient_id)
         ).first()
         if pii:
             pii.first_name = decrypt_data(pii.first_name)
             pii.last_name = decrypt_data(pii.last_name)
-            client_details = client.model_dump()
-            client_details.update(pii.model_dump())
-            client_details_list.append(ClientReadDetails(**client_details))
-    return client_details_list
+            patient_details = patient.model_dump()
+            patient_details.update(pii.model_dump())
+            patient_details_list.append(PatientReadDetails(**patient_details))
+    return patient_details_list
 
 
-@router.post("", response_model=ClientReadDetails, status_code=status.HTTP_201_CREATED)
-def create_client(client_data: ClientCreate, session: Session = Depends(get_session)):
+@router.post("", response_model=PatientReadDetails, status_code=status.HTTP_201_CREATED)
+def create_patient(
+    patient_data: PatientCreate, session: Session = Depends(get_session)
+):
     try:
         # Validate consents
         definitions = session.exec(select(ConsentDefinition)).all()
         mandatory_ids = {d.consent_definition_id for d in definitions if d.is_mandatory}
         provided_consents = {
-            c.consent_definition_id: c.has_consented for c in client_data.consents
+            c.consent_definition_id: c.has_consented for c in patient_data.consents
         }
 
         for mid in mandatory_ids:
@@ -59,31 +61,31 @@ def create_client(client_data: ClientCreate, session: Session = Depends(get_sess
                 )
 
         pii_data = {
-            "first_name": encrypt_data(client_data.first_name),
-            "last_name": encrypt_data(client_data.last_name),
-            "date_of_birth": client_data.date_of_birth,
-            "tin": client_data.tin,
-            "phone_number": client_data.phone_number,
-            "address": client_data.address,
+            "first_name": encrypt_data(patient_data.first_name),
+            "last_name": encrypt_data(patient_data.last_name),
+            "date_of_birth": patient_data.date_of_birth,
+            "tin": patient_data.tin,
+            "phone_number": patient_data.phone_number,
+            "address": patient_data.address,
         }
 
-        new_client = Client()
-        session.add(new_client)
+        new_patient = Patient()
+        session.add(new_patient)
         session.flush()
 
-        if new_client.client_id is None:
+        if new_patient.patient_id is None:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create client",
+                detail="Failed to create patient",
             )
 
-        new_pii = ClientPII(client_id=new_client.client_id, **pii_data)
+        new_pii = PatientPII(patient_id=new_patient.patient_id, **pii_data)
 
         consent_objects = []
-        for c in client_data.consents:
+        for c in patient_data.consents:
             consent_objects.append(
-                ClientConsent(
-                    client_id=new_client.client_id,
+                PatientConsent(
+                    patient_id=new_patient.patient_id,
                     consent_definition_id=c.consent_definition_id,
                     has_consented=c.has_consented,
                 )
@@ -91,38 +93,38 @@ def create_client(client_data: ClientCreate, session: Session = Depends(get_sess
 
         session.add_all([new_pii] + consent_objects)
         session.commit()
-        session.refresh(new_client)
+        session.refresh(new_patient)
         session.refresh(new_pii)
 
         new_pii.first_name = decrypt_data(new_pii.first_name)
         new_pii.last_name = decrypt_data(new_pii.last_name)
 
-        client_details = new_client.model_dump()
-        client_details.update(new_pii.model_dump())
+        patient_details = new_patient.model_dump()
+        patient_details.update(new_pii.model_dump())
 
-        return ClientReadDetails(**client_details)
+        return PatientReadDetails(**patient_details)
     except Exception as e:
         session.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to create client: {e}",
+            detail=f"Failed to create patient: {e}",
         )
 
 
-@router.get("/{client_id}", response_model=ClientReadDetails)
-def get_client_details(client_id: int, session: Session = Depends(get_session)):
-    client = session.get(Client, client_id)
-    if not client or client.deleted_at:
+@router.get("/{patient_id}", response_model=PatientReadDetails)
+def get_patient_details(patient_id: int, session: Session = Depends(get_session)):
+    patient = session.get(Patient, patient_id)
+    if not patient or patient.deleted_at:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found"
         )
 
     pii = session.exec(
-        select(ClientPII).where(ClientPII.client_id == client_id)
+        select(PatientPII).where(PatientPII.patient_id == patient_id)
     ).first()
     if not pii:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client PII not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Patient PII not found"
         )
 
     # Decrypt PII before returning
@@ -130,19 +132,21 @@ def get_client_details(client_id: int, session: Session = Depends(get_session)):
     pii.last_name = decrypt_data(pii.last_name)
 
     # Combine the two models into the response
-    client_details = client.model_dump()
-    client_details.update(pii.model_dump())
-    return ClientReadDetails(**client_details)
+    patient_details = patient.model_dump()
+    patient_details.update(pii.model_dump())
+    return PatientReadDetails(**patient_details)
 
 
-@router.put("/{client_id}", response_model=ClientReadDetails)
-def update_client_pii(
-    client_id: int, client_data: ClientCreate, session: Session = Depends(get_session)
+@router.put("/{patient_id}", response_model=PatientReadDetails)
+def update_patient_pii(
+    patient_id: int,
+    patient_data: PatientCreate,
+    session: Session = Depends(get_session),
 ):
-    client = session.get(Client, client_id)
-    if not client or client.deleted_at:
+    patient = session.get(Patient, patient_id)
+    if not patient or patient.deleted_at:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found"
         )
 
     # Validate mandatory consents
@@ -150,7 +154,7 @@ def update_client_pii(
     valid_ids = {d.consent_definition_id for d in definitions}
     mandatory_ids = {d.consent_definition_id for d in definitions if d.is_mandatory}
     provided_consents = {
-        c.consent_definition_id: c.has_consented for c in client_data.consents
+        c.consent_definition_id: c.has_consented for c in patient_data.consents
     }
 
     for cid in provided_consents:
@@ -168,30 +172,30 @@ def update_client_pii(
             )
 
     pii = session.exec(
-        select(ClientPII).where(ClientPII.client_id == client_id)
+        select(PatientPII).where(PatientPII.patient_id == patient_id)
     ).first()
     if not pii:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client PII not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Patient PII not found"
         )
 
     # Note: PII encryption should happen here
-    pii.first_name = encrypt_data(client_data.first_name)  # ENCRYPT
-    pii.last_name = encrypt_data(client_data.last_name)  # ENCRYPT
-    pii.date_of_birth = client_data.date_of_birth
-    pii.phone_number = client_data.phone_number
-    pii.address = client_data.address
-    pii.tin = client_data.tin
+    pii.first_name = encrypt_data(patient_data.first_name)  # ENCRYPT
+    pii.last_name = encrypt_data(patient_data.last_name)  # ENCRYPT
+    pii.date_of_birth = patient_data.date_of_birth
+    pii.phone_number = patient_data.phone_number
+    pii.address = patient_data.address
+    pii.tin = patient_data.tin
 
     session.add(pii)
 
     # Handle Consents Update
     existing_consents = session.exec(
-        select(ClientConsent).where(ClientConsent.client_id == client_id)
+        select(PatientConsent).where(PatientConsent.patient_id == patient_id)
     ).all()
     existing_consents_map = {c.consent_definition_id: c for c in existing_consents}
 
-    for consent_data in client_data.consents:
+    for consent_data in patient_data.consents:
         cid = consent_data.consent_definition_id
         has_consented = consent_data.has_consented
 
@@ -206,8 +210,8 @@ def update_client_pii(
                     existing_consent.revoked_at = datetime.now(timezone.utc)
                 session.add(existing_consent)
         else:
-            new_consent = ClientConsent(
-                client_id=client_id,
+            new_consent = PatientConsent(
+                patient_id=patient_id,
                 consent_definition_id=cid,
                 has_consented=has_consented,
                 granted_at=datetime.now(timezone.utc),
@@ -217,31 +221,31 @@ def update_client_pii(
 
     session.commit()
     session.refresh(pii)
-    session.refresh(client)
+    session.refresh(patient)
 
     # Decrypt PII before returning
     pii.first_name = decrypt_data(pii.first_name)
     pii.last_name = decrypt_data(pii.last_name)
 
-    client_details = client.model_dump()
-    client_details.update(pii.model_dump())
-    return ClientReadDetails(**client_details)
+    patient_details = patient.model_dump()
+    patient_details.update(pii.model_dump())
+    return PatientReadDetails(**patient_details)
 
 
-@router.delete("/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_client(client_id: int, session: Session = Depends(get_session)):
-    client = session.get(Client, client_id)
-    if not client or client.deleted_at:
+@router.delete("/{patient_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_patient(patient_id: int, session: Session = Depends(get_session)):
+    patient = session.get(Patient, patient_id)
+    if not patient or patient.deleted_at:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found"
         )
 
     now = datetime.now(timezone.utc)
-    client.deleted_at = now
-    client.is_active = False
+    patient.deleted_at = now
+    patient.is_active = False
 
     pii = session.exec(
-        select(ClientPII).where(ClientPII.client_id == client_id)
+        select(PatientPII).where(PatientPII.patient_id == patient_id)
     ).first()
     if pii:
         # Soft-deleting PII is a business decision. Here we nullify fields.
@@ -251,32 +255,32 @@ def delete_client(client_id: int, session: Session = Depends(get_session)):
         pii.address = None
         session.add(pii)
 
-    session.add(client)
+    session.add(patient)
     session.commit()
     return None
 
 
-@router.get("/{client_id}/export")
-def export_client_data(
-    client_id: int, format: str = "txt", session: Session = Depends(get_session)
+@router.get("/{patient_id}/export")
+def export_patient_data(
+    patient_id: int, format: str = "txt", session: Session = Depends(get_session)
 ):
-    client = session.get(Client, client_id)
-    if not client or client.deleted_at:
+    patient = session.get(Patient, patient_id)
+    if not patient or patient.deleted_at:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found"
         )
 
-    summary_text, client_name = generate_care_plan_summary_text(client_id, session)
+    summary_text, patient_name = generate_care_plan_summary_text(patient_id, session)
 
     if format == "txt":
-        if not client_name:
+        if not patient_name:
             raise HTTPException(
                 status_code=404, detail=summary_text
-            )  # e.g. client not found
+            )  # e.g. patient not found
 
         filename_date = datetime.now().strftime("%Y-%m-%d_%H-%M")
         filename_name = (
-            "".join(c for c in client_name if c.isalnum() or c in " _-")
+            "".join(c for c in patient_name if c.isalnum() or c in " _-")
             .replace(" ", "-")
             .rstrip()
         )
@@ -291,7 +295,7 @@ def export_client_data(
 
     elif format == "group_office":
         mock_payload = get_group_office_payload_mock(
-            str(client.client_uuid), summary_text
+            str(patient.patient_uuid), summary_text
         )
         return mock_payload
 

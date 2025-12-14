@@ -4,46 +4,48 @@ from sqlmodel import Session
 from ..database import get_session
 from ..models import (
     CareIntervention,
-    ClientProblem,
+    PatientProblem,
     InterventionCategory,
     InterventionTarget,
 )
 from ..schemas import CareInterventionCreate
 
-router = APIRouter(prefix="/clients", tags=["interventions"])
+router = APIRouter(prefix="/patients", tags=["interventions"])
 
 
 @router.post(
-    "/{client_id}/problems/{client_problem_id}/interventions",
+    "/{patient_id}/problems/{patient_problem_id}/interventions",
     status_code=status.HTTP_201_CREATED,
 )
 def create_care_intervention(
-    client_id: int,
-    client_problem_id: int,
+    patient_id: int,
+    patient_problem_id: int,
     intervention_data: CareInterventionCreate,
     session: Session = Depends(get_session),
 ):
-    problem = session.get(ClientProblem, client_problem_id)
-    if not problem or problem.client_id != client_id or problem.deleted_at:
+    problem = session.get(PatientProblem, patient_problem_id)
+    if not problem or problem.patient_id != patient_id or problem.deleted_at:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client problem not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Patient problem not found"
         )
 
     # Validate foreign keys
     category = session.get(InterventionCategory, intervention_data.category_id)
     if not category:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Intervention category not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Intervention category not found",
         )
 
     target = session.get(InterventionTarget, intervention_data.target_id)
     if not target:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Intervention target not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Intervention target not found",
         )
 
     new_intervention = CareIntervention(
-        client_problem_id=client_problem_id, **intervention_data.model_dump()
+        patient_problem_id=patient_problem_id, **intervention_data.model_dump()
     )
     session.add(new_intervention)
     session.commit()
