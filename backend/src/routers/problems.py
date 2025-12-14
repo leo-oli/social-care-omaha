@@ -3,50 +3,50 @@ from sqlmodel import Session, select
 
 from ..database import get_session
 from ..models import (
-    Client,
-    ClientProblem,
-    ClientProblemSymptom,
+    Patient,
+    PatientProblem,
+    PatientProblemSymptom,
     OmahaProblem,
     ModifierDomain,
     ModifierType,
     Symptom,
 )
 from ..schemas import (
-    ClientProblemCreate,
-    ClientProblemRead,
-    ClientProblemUpdate,
-    ClientProblemSymptomCreate,
+    PatientProblemCreate,
+    PatientProblemRead,
+    PatientProblemUpdate,
+    PatientProblemSymptomCreate,
 )
 
-router = APIRouter(prefix="/clients", tags=["problems"])
+router = APIRouter(prefix="/patients", tags=["problems"])
 
 
-@router.get("/{client_id}/problems", response_model=list[ClientProblemRead])
-def get_client_problems(client_id: int, session: Session = Depends(get_session)):
+@router.get("/{patient_id}/problems", response_model=list[PatientProblemRead])
+def get_patient_problems(patient_id: int, session: Session = Depends(get_session)):
     problems = session.exec(
-        select(ClientProblem)
-        .where(ClientProblem.client_id == client_id)
-        .where(ClientProblem.is_active == True)  # noqa: E712
-        .where(ClientProblem.deleted_at == None)  # noqa: E711
+        select(PatientProblem)
+        .where(PatientProblem.patient_id == patient_id)
+        .where(PatientProblem.is_active == True)  # noqa: E712
+        .where(PatientProblem.deleted_at == None)  # noqa: E711
     ).all()
     return problems
 
 
 @router.post(
-    "/{client_id}/problems",
-    response_model=ClientProblemRead,
+    "/{patient_id}/problems",
+    response_model=PatientProblemRead,
     status_code=status.HTTP_201_CREATED,
 )
-def create_client_problem(
-    client_id: int,
-    problem_data: ClientProblemCreate,
+def create_patient_problem(
+    patient_id: int,
+    problem_data: PatientProblemCreate,
     session: Session = Depends(get_session),
 ):
-    # Validate client exists
-    client = session.get(Client, client_id)
-    if not client or client.deleted_at:
+    # Validate patient exists
+    patient = session.get(Patient, patient_id)
+    if not patient or patient.deleted_at:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found"
         )
 
     # Validate foreign keys
@@ -68,7 +68,7 @@ def create_client_problem(
             status_code=status.HTTP_404_NOT_FOUND, detail="Modifier type not found"
         )
 
-    new_problem = ClientProblem(client_id=client_id, **problem_data.model_dump())
+    new_problem = PatientProblem(patient_id=patient_id, **problem_data.model_dump())
     session.add(new_problem)
     session.commit()
     session.refresh(new_problem)
@@ -76,19 +76,19 @@ def create_client_problem(
 
 
 @router.patch(
-    "/{client_id}/problems/{client_problem_id}",
-    response_model=ClientProblemRead,
+    "/{patient_id}/problems/{patient_problem_id}",
+    response_model=PatientProblemRead,
 )
-def update_client_problem(
-    client_id: int,
-    client_problem_id: int,
-    problem_data: ClientProblemUpdate,
+def update_patient_problem(
+    patient_id: int,
+    patient_problem_id: int,
+    problem_data: PatientProblemUpdate,
     session: Session = Depends(get_session),
 ):
-    problem = session.get(ClientProblem, client_problem_id)
-    if not problem or problem.client_id != client_id or problem.deleted_at:
+    problem = session.get(PatientProblem, patient_problem_id)
+    if not problem or problem.patient_id != patient_id or problem.deleted_at:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client problem not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Patient problem not found"
         )
 
     problem.is_active = problem_data.is_active
@@ -99,33 +99,33 @@ def update_client_problem(
 
 
 @router.post(
-    "/{client_id}/problems/{client_problem_id}/symptoms",
+    "/{patient_id}/problems/{patient_problem_id}/symptoms",
     status_code=status.HTTP_201_CREATED,
 )
 def add_symptom_to_problem(
-    client_id: int,
-    client_problem_id: int,
-    symptom_data: ClientProblemSymptomCreate,
+    patient_id: int,
+    patient_problem_id: int,
+    symptom_data: PatientProblemSymptomCreate,
     session: Session = Depends(get_session),
 ):
-    problem = session.get(ClientProblem, client_problem_id)
-    if not problem or problem.client_id != client_id or problem.deleted_at:
+    problem = session.get(PatientProblem, patient_problem_id)
+    if not problem or problem.patient_id != patient_id or problem.deleted_at:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client problem not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Patient problem not found"
         )
 
     if not problem.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Client problem is not active",
+            detail="Patient problem is not active",
         )
 
     # Check for duplicates
     existing_symptom = session.exec(
-        select(ClientProblemSymptom)
-        .where(ClientProblemSymptom.client_problem_id == client_problem_id)
-        .where(ClientProblemSymptom.symptom_id == symptom_data.symptom_id)
-        .where(ClientProblemSymptom.deleted_at == None)  # noqa: E711
+        select(PatientProblemSymptom)
+        .where(PatientProblemSymptom.patient_problem_id == patient_problem_id)
+        .where(PatientProblemSymptom.symptom_id == symptom_data.symptom_id)
+        .where(PatientProblemSymptom.deleted_at == None)  # noqa: E711
     ).first()
 
     if existing_symptom:
@@ -137,8 +137,8 @@ def add_symptom_to_problem(
             status_code=status.HTTP_404_NOT_FOUND, detail="Symptom not found"
         )
 
-    new_symptom = ClientProblemSymptom(
-        client_problem_id=client_problem_id,
+    new_symptom = PatientProblemSymptom(
+        patient_problem_id=patient_problem_id,
         symptom_id=symptom_data.symptom_id,
         symptom_comment=symptom_data.symptom_comment,
     )

@@ -6,16 +6,18 @@ from .database import create_db_and_tables
 from .routers import (
     assessments,
     care_plans,
-    clients,
+    patients,
     interventions,
     problems,
     static,
 )
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_db_and_tables()
     yield
+
 
 app = FastAPI(title="Omaha System API", version="0.1", lifespan=lifespan)
 
@@ -30,11 +32,12 @@ app.add_middleware(
 )
 
 app.include_router(static.router, prefix="/api/v1")
-app.include_router(clients.router, prefix="/api/v1")
+app.include_router(patients.router, prefix="/api/v1")
 app.include_router(assessments.router, prefix="/api/v1")
 app.include_router(interventions.router, prefix="/api/v1")
 app.include_router(care_plans.router, prefix="/api/v1")
 app.include_router(problems.router, prefix="/api/v1")
+
 
 @app.get("/api/v1/health")
 async def health_check():

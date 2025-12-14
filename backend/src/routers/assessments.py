@@ -3,7 +3,7 @@ from sqlmodel import Session, select
 
 from ..database import get_session
 from ..models import (
-    ClientProblem,
+    PatientProblem,
     OutcomeScore,
     OutcomeRatingBehavior,
     OutcomeRatingKnowledge,
@@ -12,23 +12,23 @@ from ..models import (
 )
 from ..schemas import OutcomeScoreCreate, OutcomeScoreRead
 
-router = APIRouter(prefix="/clients", tags=["assessments"])
+router = APIRouter(prefix="/patients", tags=["assessments"])
 
 
 @router.post(
-    "/{client_id}/problems/{client_problem_id}/scores",
+    "/{patient_id}/problems/{patient_problem_id}/scores",
     status_code=status.HTTP_201_CREATED,
 )
 def create_outcome_score(
-    client_id: int,
-    client_problem_id: int,
+    patient_id: int,
+    patient_problem_id: int,
     score_data: OutcomeScoreCreate,
     session: Session = Depends(get_session),
 ):
-    problem = session.get(ClientProblem, client_problem_id)
-    if not problem or problem.client_id != client_id or problem.deleted_at:
+    problem = session.get(PatientProblem, patient_problem_id)
+    if not problem or problem.patient_id != patient_id or problem.deleted_at:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client problem not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Patient problem not found"
         )
 
     if not session.get(OutcomePhase, score_data.phase_id):
@@ -63,7 +63,7 @@ def create_outcome_score(
         )
 
     new_score = OutcomeScore(
-        client_problem_id=client_problem_id, **score_data.model_dump()
+        patient_problem_id=patient_problem_id, **score_data.model_dump()
     )
     session.add(new_score)
     session.commit()
@@ -72,29 +72,29 @@ def create_outcome_score(
 
 
 @router.get(
-    "/{client_id}/problems/{client_problem_id}/scores",
+    "/{patient_id}/problems/{patient_problem_id}/scores",
     response_model=list[OutcomeScoreRead],
 )
 def get_problem_scores(
-    client_id: int,
-    client_problem_id: int,
+    patient_id: int,
+    patient_problem_id: int,
     session: Session = Depends(get_session),
 ):
-    problem = session.get(ClientProblem, client_problem_id)
-    if not problem or problem.client_id != client_id or problem.deleted_at:
+    problem = session.get(PatientProblem, patient_problem_id)
+    if not problem or problem.patient_id != patient_id or problem.deleted_at:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client problem not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Patient problem not found"
         )
 
     if not problem.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Client problem is not active",
+            detail="Patient problem is not active",
         )
 
     scores = session.exec(
         select(OutcomeScore)
-        .where(OutcomeScore.client_problem_id == client_problem_id)
+        .where(OutcomeScore.patient_problem_id == patient_problem_id)
         .where(OutcomeScore.deleted_at == None)  # noqa: E711
         .order_by(OutcomeScore.date_recorded.desc())  # type: ignore
     ).all()
