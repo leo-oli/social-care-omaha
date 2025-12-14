@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlmodel import Session, select
@@ -5,6 +6,7 @@ from sqlmodel import Session, select
 from ..database import get_session
 from ..services.export import (
     generate_care_plan_summary_text,
+    generate_care_plan_summary_json,
     get_group_office_payload_mock,
 )
 from ..models import (
@@ -262,7 +264,10 @@ def delete_patient(patient_id: int, session: Session = Depends(get_session)):
 
 @router.get("/{patient_id}/export")
 def export_patient_data(
-    patient_id: int, format: str = "txt", session: Session = Depends(get_session)
+    patient_id: int,
+    export_format: str = "txt",
+    destination: str = "download",
+    session: Session = Depends(get_session),
 ):
     patient = session.get(Patient, patient_id)
     if not patient or patient.deleted_at:
@@ -270,36 +275,47 @@ def export_patient_data(
             status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found"
         )
 
-    summary_text, patient_name = generate_care_plan_summary_text(patient_id, session)
-
-    if format == "txt":
+    if export_format == "txt":
+        summary_text, patient_name = generate_care_plan_summary_text(
+            patient_id, session
+        )
         if not patient_name:
             raise HTTPException(
-                status_code=404, detail=summary_text
-            )  # e.g. patient not found
-
-        filename_date = datetime.now().strftime("%Y-%m-%d_%H-%M")
-        filename_name = (
-            "".join(c for c in patient_name if c.isalnum() or c in " _-")
-            .replace(" ", "-")
-            .rstrip()
-        )
-
-        return Response(
-            content=summary_text,
-            media_type="text/plain",
-            headers={
-                "Content-Disposition": f'attachment; filename="CarePlan_{filename_name}_{filename_date}.txt"'
-            },
-        )
-
-    elif format == "group_office":
-        mock_payload = get_group_office_payload_mock(
-            str(patient.patient_uuid), summary_text
-        )
-        return mock_payload
-
+                status_code=status.HTTP_404_NOT_FOUND, detail=patient_name
+            )
+        content = summary_text
+        media_type = "text/plain"
+        extension = "txt"
+    elif export_format == "json":
+        summary_json = generate_care_plan_summary_json(patient_id, session)
+        if not summary_json:
+            raise HTTPException(status_code=404, detail="Patient PII not found")
+        patient_name = summary_json["patient"]["name"]
+        content = json.dumps(summary_json, indent=2)
+        media_type = "application/json"
+        extension = "json"
     else:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid format specified"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid export_format specified",
         )
+
+    if destination == "group_office":
+        mock_payload = get_group_office_payload_mock(str(patient.patient_uuid), content)
+        return mock_payload
+
+    # Default: download
+    filename_date = datetime.now().strftime("%Y-%m-%d_%H-%M")
+    filename_name = (
+        "".join(c for c in patient_name if c.isalnum() or c in " _-")
+        .replace(" ", "-")
+        .rstrip()
+    )
+
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="CarePlan_{filename_name}_{filename_date}.{extension}"'
+        },
+    )
