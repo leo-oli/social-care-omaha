@@ -25,19 +25,24 @@ router = APIRouter(prefix="/patients", tags=["patients"])
 
 
 @router.get("", response_model=list[PatientReadDetails])
-def get_patients(session: Session = Depends(get_session)):
-    patients = session.exec(select(Patient).where(Patient.deleted_at == None)).all()  # noqa: E711
+def get_patients(tin: str | None = None, session: Session = Depends(get_session)):
+    query = (
+        select(Patient, PatientPII)
+        .where(Patient.patient_id == PatientPII.patient_id)
+        .where(Patient.deleted_at == None)  # noqa: E711
+    )
+
+    if tin:
+        query = query.where(PatientPII.tin == tin)
+
+    results = session.exec(query).all()
     patient_details_list = []
-    for patient in patients:
-        pii = session.exec(
-            select(PatientPII).where(PatientPII.patient_id == patient.patient_id)
-        ).first()
-        if pii:
-            pii.first_name = decrypt_data(pii.first_name)
-            pii.last_name = decrypt_data(pii.last_name)
-            patient_details = patient.model_dump()
-            patient_details.update(pii.model_dump())
-            patient_details_list.append(PatientReadDetails(**patient_details))
+    for patient, pii in results:
+        pii.first_name = decrypt_data(pii.first_name)
+        pii.last_name = decrypt_data(pii.last_name)
+        patient_details = patient.model_dump()
+        patient_details.update(pii.model_dump())
+        patient_details_list.append(PatientReadDetails(**patient_details))
     return patient_details_list
 
 
