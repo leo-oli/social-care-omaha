@@ -7,7 +7,8 @@ from ..database import get_session
 from ..services.export import (
     generate_care_plan_summary_text,
     generate_care_plan_summary_json,
-    get_group_office_payload_mock,
+    create_group_office_note,
+    update_group_office_note,
 )
 from ..models import (
     Patient,
@@ -270,6 +271,7 @@ def delete_patient(patient_id: int, session: Session = Depends(get_session)):
 @router.get("/{patient_id}/export")
 def export_patient_data(
     patient_id: int,
+    response: Response,
     export_format: str = "txt",
     destination: str = "download",
     session: Session = Depends(get_session),
@@ -320,10 +322,38 @@ def export_patient_data(
     # Ensure content is stringified for file-based destinations
     content_string = response_data
     if not isinstance(content_string, str):
-        content_string = json.dumps(response_data, indent=2)
+        content_string = json.dumps(response_data)
 
     if destination == "group_office":
-        return get_group_office_payload_mock(str(patient.patient_uuid), content_string)
+        note_title = f"Care Plan: {patient_name}"
+        try:
+            if patient.group_office_note_id is None:
+                # Create new note
+                note_id = create_group_office_note(note_title, content_string)
+                patient.group_office_note_id = note_id
+                session.add(patient)
+                session.commit()
+                session.refresh(patient)
+                response.status_code = status.HTTP_201_CREATED
+                return {"status": "success", "action": "created", "note_id": note_id}
+            else:
+                # Update existing note
+                update_group_office_note(
+                    patient.group_office_note_id, note_title, content_string
+                )
+                response.status_code = status.HTTP_200_OK
+                return {
+                    "status": "success",
+                    "action": "updated",
+                    "note_id": patient.group_office_note_id,
+                }
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Group Office integration failed: {str(e)}",
+            )
 
     if destination == "preview":
         # Return raw JSON dict or raw Text string directly

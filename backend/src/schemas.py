@@ -124,6 +124,7 @@ class PatientReadDetails(SQLModel):
     date_of_birth: date
     phone_number: str | None
     address: str | None
+    group_office_note_id: int | None
 
 
 # ==========================================

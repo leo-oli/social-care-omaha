@@ -152,6 +152,7 @@ class Patient(SQLModel, table=True):
     patient_id: int | None = Field(default=None, primary_key=True)
     patient_uuid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True)
     is_active: bool = Field(default=True)
+    group_office_note_id: int | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime | None = Field(
         default=None,
