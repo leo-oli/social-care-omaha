@@ -422,6 +422,21 @@ def update_group_office_note(note_id: int, note_title: str, note_content: str) -
         raise ValueError(f"Update to Group Office failed: {e}")
 
 
+def format_for_group_office(content: str) -> str:
+    """
+    Formats plain text for Group Office notes by wrapping lines in <div> tags.
+    Empty lines are converted to <div><br></div>.
+    """
+    lines = content.split("\n")
+    formatted = []
+    for line in lines:
+        if not line:
+            formatted.append("<div><br></div>")
+        else:
+            formatted.append(f"<div>{line}</div>")
+    return "".join(formatted)
+
+
 def get_group_office_payload_mock(
     patient_uuid: str, summary_text: str
 ) -> dict[str, Any]:

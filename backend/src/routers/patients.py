@@ -9,6 +9,7 @@ from ..services.export import (
     generate_care_plan_summary_json,
     create_group_office_note,
     update_group_office_note,
+    format_for_group_office,
 )
 from ..models import (
     Patient,
@@ -82,7 +83,9 @@ def create_patient(
             "phone_number": encrypt_data(patient_data.phone_number)
             if patient_data.phone_number
             else None,
-            "address": encrypt_data(patient_data.address) if patient_data.address else None,
+            "address": encrypt_data(patient_data.address)
+            if patient_data.address
+            else None,
         }
 
         new_patient = Patient()
@@ -354,10 +357,15 @@ def export_patient_data(
 
     if destination == "group_office":
         note_title = f"Care Plan: {patient_name}"
+
+        note_content = content_string
+        if export_format == "txt":
+            note_content = format_for_group_office(content_string)
+
         try:
             if patient.group_office_note_id is None:
                 # Create new note
-                note_id = create_group_office_note(note_title, content_string)
+                note_id = create_group_office_note(note_title, note_content)
                 patient.group_office_note_id = note_id
                 session.add(patient)
                 session.commit()
@@ -367,7 +375,7 @@ def export_patient_data(
             else:
                 # Update existing note
                 update_group_office_note(
-                    patient.group_office_note_id, note_title, content_string
+                    patient.group_office_note_id, note_title, note_content
                 )
                 response.status_code = status.HTTP_200_OK
                 return {
