@@ -13,6 +13,7 @@ from .routers import (
 )
 
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_db_and_tables()
@@ -42,3 +43,4 @@ app.include_router(problems.router, prefix="/api/v1")
 @app.get("/api/v1/health")
 async def health_check():
     return {"status": "ok"}
+

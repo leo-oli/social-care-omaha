@@ -25,19 +25,24 @@ router = APIRouter(prefix="/patients", tags=["patients"])
 
 
 @router.get("", response_model=list[PatientReadDetails])
-def get_patients(session: Session = Depends(get_session)):
-    patients = session.exec(select(Patient).where(Patient.deleted_at == None)).all()  # noqa: E711
+def get_patients(tin: str | None = None, session: Session = Depends(get_session)):
+    query = (
+        select(Patient, PatientPII)
+        .where(Patient.patient_id == PatientPII.patient_id)
+        .where(Patient.deleted_at == None)  # noqa: E711
+    )
+
+    if tin:
+        query = query.where(PatientPII.tin == tin)
+
+    results = session.exec(query).all()
     patient_details_list = []
-    for patient in patients:
-        pii = session.exec(
-            select(PatientPII).where(PatientPII.patient_id == patient.patient_id)
-        ).first()
-        if pii:
-            pii.first_name = decrypt_data(pii.first_name)
-            pii.last_name = decrypt_data(pii.last_name)
-            patient_details = patient.model_dump()
-            patient_details.update(pii.model_dump())
-            patient_details_list.append(PatientReadDetails(**patient_details))
+    for patient, pii in results:
+        pii.first_name = decrypt_data(pii.first_name)
+        pii.last_name = decrypt_data(pii.last_name)
+        patient_details = patient.model_dump()
+        patient_details.update(pii.model_dump())
+        patient_details_list.append(PatientReadDetails(**patient_details))
     return patient_details_list
 
 
@@ -269,53 +274,74 @@ def export_patient_data(
     destination: str = "download",
     session: Session = Depends(get_session),
 ):
+    if export_format not in ("txt", "json"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid export_format. Options: 'txt', 'json'",
+        )
+
+    if destination not in ("download", "group_office", "preview"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid destination. Options: 'download', 'group_office', 'preview'",
+        )
+
     patient = session.get(Patient, patient_id)
     if not patient or patient.deleted_at:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found"
         )
 
+    # 1. Generate Content (Data Layer)
+    response_data = None
+    patient_name = "Unknown"
+    media_type = "text/plain"
+
     if export_format == "txt":
-        summary_text, patient_name = generate_care_plan_summary_text(
+        response_data, patient_name = generate_care_plan_summary_text(
             patient_id, session
         )
-        if not patient_name:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail=patient_name
-            )
-        content = summary_text
         media_type = "text/plain"
-        extension = "txt"
     elif export_format == "json":
-        summary_json = generate_care_plan_summary_json(patient_id, session)
-        if not summary_json:
-            raise HTTPException(status_code=404, detail="Patient PII not found")
-        patient_name = summary_json["patient"]["name"]
-        content = json.dumps(summary_json, indent=2)
+        response_data = generate_care_plan_summary_json(patient_id, session)
+        if not response_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Patient PII not found"
+            )
+        patient_name = response_data.get("patient", {}).get("name", "Unknown")
         media_type = "application/json"
-        extension = "json"
-    else:
+
+    if not patient_name:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid export_format specified",
+            status_code=status.HTTP_404_NOT_FOUND, detail="Patient name not found"
         )
 
-    if destination == "group_office":
-        mock_payload = get_group_office_payload_mock(str(patient.patient_uuid), content)
-        return mock_payload
+    # 2. Handle Delivery Strategy (Presentation Layer)
+    # Ensure content is stringified for file-based destinations
+    content_string = response_data
+    if not isinstance(content_string, str):
+        content_string = json.dumps(response_data, indent=2)
 
-    # Default: download
+    if destination == "group_office":
+        return get_group_office_payload_mock(str(patient.patient_uuid), content_string)
+
+    if destination == "preview":
+        # Return raw JSON dict or raw Text string directly
+        if export_format == "json":
+            return response_data
+        return Response(content=content_string, media_type=media_type)
+
+    # Default: File Download
     filename_date = datetime.now().strftime("%Y-%m-%d_%H-%M")
-    filename_name = (
+    safe_name = (
         "".join(c for c in patient_name if c.isalnum() or c in " _-")
         .replace(" ", "-")
-        .rstrip()
+        .strip()
     )
+    filename = f"CarePlan_{safe_name}_{filename_date}.{export_format}"
 
     return Response(
-        content=content,
+        content=content_string,
         media_type=media_type,
-        headers={
-            "Content-Disposition": f'attachment; filename="CarePlan_{filename_name}_{filename_date}.{extension}"'
-        },
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
