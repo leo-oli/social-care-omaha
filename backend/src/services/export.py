@@ -1,9 +1,10 @@
 from datetime import datetime
 from typing import Any
 from sqlmodel import Session, select
+import httpx
 
 from sqlalchemy import desc
-from .. import models
+from .. import models, config
 from .encryption import decrypt_data
 
 
@@ -27,10 +28,10 @@ def generate_care_plan_summary_text(
     first_name = decrypt_data(pii.first_name)
     last_name = decrypt_data(pii.last_name)
     patient_name = f"{first_name} {last_name}"
-    dob = pii.date_of_birth
-    tin = pii.tin
-    address = pii.address
-    phone_number = pii.phone_number
+    dob = decrypt_data(pii.date_of_birth)
+    tin = decrypt_data(pii.tin)
+    address = decrypt_data(pii.address) if pii.address else None
+    phone_number = decrypt_data(pii.phone_number) if pii.phone_number else None
     generation_date = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     lines = [
@@ -165,10 +166,10 @@ def generate_care_plan_summary_json(
     summary = {
         "patient": {
             "name": f"{first_name} {last_name}",
-            "dob": pii.date_of_birth.isoformat() if pii.date_of_birth else None,
-            "tin": pii.tin,
-            "phone": pii.phone_number,
-            "address": pii.address,
+            "dob": decrypt_data(pii.date_of_birth),
+            "tin": decrypt_data(pii.tin),
+            "phone": decrypt_data(pii.phone_number) if pii.phone_number else None,
+            "address": decrypt_data(pii.address) if pii.address else None,
         },
         "generated_at": datetime.now().isoformat(),
         "active_problems": [],
@@ -259,6 +260,181 @@ def generate_care_plan_summary_json(
         summary["active_problems"].append(problem_entry)
 
     return summary
+
+
+def get_auth_token() -> str:
+    if (
+        not config.settings.GO_URL
+        or not config.settings.GO_USERNAME
+        or not config.settings.GO_PASSWORD
+    ):
+        raise ValueError(
+            "Group Office configuration missing (URL, Username, or Password)"
+        )
+
+    url_auth = f"{config.settings.GO_URL}/api/auth.php"
+    try:
+        with httpx.Client(timeout=60.0) as client:
+            response = client.post(
+                url_auth,
+                json={
+                    "username": config.settings.GO_USERNAME,
+                    "password": config.settings.GO_PASSWORD,
+                },
+                headers={"Content-Type": "application/json"},
+            )
+            response.raise_for_status()
+            data = response.json()
+            token = data.get("accessToken")
+            if not token:
+                raise ValueError("Authentication response missing 'accessToken'")
+            return token
+    except httpx.RequestError as e:
+        raise ValueError(f"Failed to connect to Group Office auth: {e}")
+    except httpx.HTTPStatusError as e:
+        raise ValueError(
+            f"Group Office auth returned error status: {e.response.status_code}"
+        )
+    except Exception as e:
+        raise ValueError(f"Group Office authentication failed: {e}")
+
+
+def create_group_office_note(note_title: str, note_content: str) -> int:
+    token = get_auth_token()
+    url_base = f"{config.settings.GO_URL}/api/jmap.php"
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
+
+    # JMAP Payload
+    payload = [
+        [
+            "Note/set",
+            {
+                "create": {
+                    "assessment": {
+                        "noteBookId": config.settings.GO_NOTEBOOK_ID,
+                        "name": note_title,
+                        "content": note_content,
+                    }
+                },
+            },
+            "call-1",
+        ]
+    ]
+
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            response = client.post(url_base, json=payload, headers=headers)
+            response.raise_for_status()
+            response_data = response.json()
+
+            # Basic JMAP response validation
+            if not isinstance(response_data, list) or not response_data:
+                raise ValueError("Invalid JMAP response format")
+
+            # Check for JMAP method response
+            # Structure: [[method_name, {created: ..., notCreated: ...}, method_id]]
+            method_response = response_data[0]
+            if len(method_response) < 2:
+                raise ValueError("Invalid JMAP method response")
+
+            result = method_response[1]
+
+            # Check for failure ("notCreated")
+            if "notCreated" in result and result["notCreated"]:
+                raise ValueError(
+                    f"Group Office rejected creation: {result['notCreated']}"
+                )
+
+            # Check for success ("created")
+            if "created" in result and result["created"]:
+                return int(result["created"]["assessment"]["id"])
+
+            raise ValueError(f"Group Office response unclear: {result}")
+
+    except httpx.RequestError as e:
+        raise ValueError(f"Failed to connect to Group Office JMAP: {e}")
+    except httpx.HTTPStatusError as e:
+        raise ValueError(
+            f"Group Office JMAP returned error status: {e.response.status_code}"
+        )
+    except Exception as e:
+        raise ValueError(f"Export to Group Office failed: {e}")
+
+
+def update_group_office_note(note_id: int, note_title: str, note_content: str) -> bool:
+    token = get_auth_token()
+    url_base = f"{config.settings.GO_URL}/api/jmap.php"
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
+
+    # JMAP Payload
+    payload = [
+        [
+            "Note/set",
+            {
+                "update": {
+                    str(note_id): {
+                        "name": note_title,
+                        "content": note_content,
+                    }
+                }
+            },
+            "call-1",
+        ]
+    ]
+
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            response = client.post(url_base, json=payload, headers=headers)
+            response.raise_for_status()
+            response_data = response.json()
+
+            # Basic JMAP response validation
+            if not isinstance(response_data, list) or not response_data:
+                raise ValueError("Invalid JMAP response format")
+
+            # Check for JMAP method response
+            # Structure: [[method_name, {updated: ..., notUpdated: ...}, method_id]]
+            method_response = response_data[0]
+            if len(method_response) < 2:
+                raise ValueError("Invalid JMAP method response")
+
+            result = method_response[1]
+
+            # Check for failure ("notUpdated")
+            if "notUpdated" in result and result["notUpdated"]:
+                raise ValueError(
+                    f"Group Office rejected update: {result['notUpdated']}"
+                )
+
+            # Check for success ("updated")
+            if "updated" in result and result["updated"]:
+                return True
+
+            raise ValueError(f"Group Office response unclear: {result}")
+
+    except httpx.RequestError as e:
+        raise ValueError(f"Failed to connect to Group Office JMAP: {e}")
+    except httpx.HTTPStatusError as e:
+        raise ValueError(
+            f"Group Office JMAP returned error status: {e.response.status_code}"
+        )
+    except Exception as e:
+        raise ValueError(f"Update to Group Office failed: {e}")
+
+
+def format_for_group_office(content: str) -> str:
+    """
+    Formats plain text for Group Office notes by wrapping lines in <div> tags.
+    Empty lines are converted to <div><br></div>.
+    """
+    lines = content.split("\n")
+    formatted = []
+    for line in lines:
+        if not line:
+            formatted.append("<div><br></div>")
+        else:
+            formatted.append(f"<div>{line}</div>")
+    return "".join(formatted)
 
 
 def get_group_office_payload_mock(
