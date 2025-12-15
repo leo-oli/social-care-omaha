@@ -41,6 +41,12 @@ def get_patients(tin: str | None = None, session: Session = Depends(get_session)
     for patient, pii in results:
         pii.first_name = decrypt_data(pii.first_name)
         pii.last_name = decrypt_data(pii.last_name)
+        pii.date_of_birth = decrypt_data(pii.date_of_birth)
+        pii.tin = decrypt_data(pii.tin)
+        if pii.phone_number:
+            pii.phone_number = decrypt_data(pii.phone_number)
+        if pii.address:
+            pii.address = decrypt_data(pii.address)
         patient_details = patient.model_dump()
         patient_details.update(pii.model_dump())
         patient_details_list.append(PatientReadDetails(**patient_details))
@@ -71,10 +77,12 @@ def create_patient(
         pii_data = {
             "first_name": encrypt_data(patient_data.first_name),
             "last_name": encrypt_data(patient_data.last_name),
-            "date_of_birth": patient_data.date_of_birth,
-            "tin": patient_data.tin,
-            "phone_number": patient_data.phone_number,
-            "address": patient_data.address,
+            "date_of_birth": encrypt_data(str(patient_data.date_of_birth)),
+            "tin": encrypt_data(patient_data.tin),
+            "phone_number": encrypt_data(patient_data.phone_number)
+            if patient_data.phone_number
+            else None,
+            "address": encrypt_data(patient_data.address) if patient_data.address else None,
         }
 
         new_patient = Patient()
@@ -106,6 +114,12 @@ def create_patient(
 
         new_pii.first_name = decrypt_data(new_pii.first_name)
         new_pii.last_name = decrypt_data(new_pii.last_name)
+        new_pii.date_of_birth = decrypt_data(new_pii.date_of_birth)
+        new_pii.tin = decrypt_data(new_pii.tin)
+        if new_pii.phone_number:
+            new_pii.phone_number = decrypt_data(new_pii.phone_number)
+        if new_pii.address:
+            new_pii.address = decrypt_data(new_pii.address)
 
         patient_details = new_patient.model_dump()
         patient_details.update(new_pii.model_dump())
@@ -138,6 +152,12 @@ def get_patient_details(patient_id: int, session: Session = Depends(get_session)
     # Decrypt PII before returning
     pii.first_name = decrypt_data(pii.first_name)
     pii.last_name = decrypt_data(pii.last_name)
+    pii.date_of_birth = decrypt_data(pii.date_of_birth)
+    pii.tin = decrypt_data(pii.tin)
+    if pii.phone_number:
+        pii.phone_number = decrypt_data(pii.phone_number)
+    if pii.address:
+        pii.address = decrypt_data(pii.address)
 
     # Combine the two models into the response
     patient_details = patient.model_dump()
@@ -190,10 +210,12 @@ def update_patient_pii(
     # Note: PII encryption should happen here
     pii.first_name = encrypt_data(patient_data.first_name)  # ENCRYPT
     pii.last_name = encrypt_data(patient_data.last_name)  # ENCRYPT
-    pii.date_of_birth = patient_data.date_of_birth
-    pii.phone_number = patient_data.phone_number
-    pii.address = patient_data.address
-    pii.tin = patient_data.tin
+    pii.date_of_birth = encrypt_data(str(patient_data.date_of_birth))
+    pii.tin = encrypt_data(patient_data.tin)
+    pii.phone_number = (
+        encrypt_data(patient_data.phone_number) if patient_data.phone_number else None
+    )
+    pii.address = encrypt_data(patient_data.address) if patient_data.address else None
 
     session.add(pii)
 
@@ -234,6 +256,12 @@ def update_patient_pii(
     # Decrypt PII before returning
     pii.first_name = decrypt_data(pii.first_name)
     pii.last_name = decrypt_data(pii.last_name)
+    pii.date_of_birth = decrypt_data(pii.date_of_birth)
+    pii.tin = decrypt_data(pii.tin)
+    if pii.phone_number:
+        pii.phone_number = decrypt_data(pii.phone_number)
+    if pii.address:
+        pii.address = decrypt_data(pii.address)
 
     patient_details = patient.model_dump()
     patient_details.update(pii.model_dump())

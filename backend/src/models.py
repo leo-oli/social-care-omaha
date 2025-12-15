@@ -109,8 +109,8 @@ class PatientPII(SQLModel, table=True):
     patient_id: int = Field(foreign_key="patient.patient_id", unique=True)
     first_name: str  # Note: Handle encryption in application logic
     last_name: str  # Note: Handle encryption in application logic
-    date_of_birth: date
-    tin: str = Field(unique=True, max_length=11)
+    date_of_birth: str
+    tin: str
     phone_number: str | None = None
     address: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

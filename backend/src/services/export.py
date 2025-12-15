@@ -28,10 +28,10 @@ def generate_care_plan_summary_text(
     first_name = decrypt_data(pii.first_name)
     last_name = decrypt_data(pii.last_name)
     patient_name = f"{first_name} {last_name}"
-    dob = pii.date_of_birth
-    tin = pii.tin
-    address = pii.address
-    phone_number = pii.phone_number
+    dob = decrypt_data(pii.date_of_birth)
+    tin = decrypt_data(pii.tin)
+    address = decrypt_data(pii.address) if pii.address else None
+    phone_number = decrypt_data(pii.phone_number) if pii.phone_number else None
     generation_date = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     lines = [
@@ -166,10 +166,10 @@ def generate_care_plan_summary_json(
     summary = {
         "patient": {
             "name": f"{first_name} {last_name}",
-            "dob": pii.date_of_birth.isoformat() if pii.date_of_birth else None,
-            "tin": pii.tin,
-            "phone": pii.phone_number,
-            "address": pii.address,
+            "dob": decrypt_data(pii.date_of_birth),
+            "tin": decrypt_data(pii.tin),
+            "phone": decrypt_data(pii.phone_number) if pii.phone_number else None,
+            "address": decrypt_data(pii.address) if pii.address else None,
         },
         "generated_at": datetime.now().isoformat(),
         "active_problems": [],
@@ -263,8 +263,14 @@ def generate_care_plan_summary_json(
 
 
 def get_auth_token() -> str:
-    if not config.settings.GO_URL or not config.settings.GO_USERNAME or not config.settings.GO_PASSWORD:
-        raise ValueError("Group Office configuration missing (URL, Username, or Password)")
+    if (
+        not config.settings.GO_URL
+        or not config.settings.GO_USERNAME
+        or not config.settings.GO_PASSWORD
+    ):
+        raise ValueError(
+            "Group Office configuration missing (URL, Username, or Password)"
+        )
 
     url_auth = f"{config.settings.GO_URL}/api/auth.php"
     try:
@@ -286,7 +292,9 @@ def get_auth_token() -> str:
     except httpx.RequestError as e:
         raise ValueError(f"Failed to connect to Group Office auth: {e}")
     except httpx.HTTPStatusError as e:
-        raise ValueError(f"Group Office auth returned error status: {e.response.status_code}")
+        raise ValueError(
+            f"Group Office auth returned error status: {e.response.status_code}"
+        )
     except Exception as e:
         raise ValueError(f"Group Office authentication failed: {e}")
 
@@ -333,7 +341,9 @@ def create_group_office_note(note_title: str, note_content: str) -> int:
 
             # Check for failure ("notCreated")
             if "notCreated" in result and result["notCreated"]:
-                raise ValueError(f"Group Office rejected creation: {result['notCreated']}")
+                raise ValueError(
+                    f"Group Office rejected creation: {result['notCreated']}"
+                )
 
             # Check for success ("created")
             if "created" in result and result["created"]:
@@ -344,7 +354,9 @@ def create_group_office_note(note_title: str, note_content: str) -> int:
     except httpx.RequestError as e:
         raise ValueError(f"Failed to connect to Group Office JMAP: {e}")
     except httpx.HTTPStatusError as e:
-        raise ValueError(f"Group Office JMAP returned error status: {e.response.status_code}")
+        raise ValueError(
+            f"Group Office JMAP returned error status: {e.response.status_code}"
+        )
     except Exception as e:
         raise ValueError(f"Export to Group Office failed: {e}")
 
@@ -390,7 +402,9 @@ def update_group_office_note(note_id: int, note_title: str, note_content: str) -
 
             # Check for failure ("notUpdated")
             if "notUpdated" in result and result["notUpdated"]:
-                raise ValueError(f"Group Office rejected update: {result['notUpdated']}")
+                raise ValueError(
+                    f"Group Office rejected update: {result['notUpdated']}"
+                )
 
             # Check for success ("updated")
             if "updated" in result and result["updated"]:
@@ -401,7 +415,9 @@ def update_group_office_note(note_id: int, note_title: str, note_content: str) -
     except httpx.RequestError as e:
         raise ValueError(f"Failed to connect to Group Office JMAP: {e}")
     except httpx.HTTPStatusError as e:
-        raise ValueError(f"Group Office JMAP returned error status: {e.response.status_code}")
+        raise ValueError(
+            f"Group Office JMAP returned error status: {e.response.status_code}"
+        )
     except Exception as e:
         raise ValueError(f"Update to Group Office failed: {e}")
 

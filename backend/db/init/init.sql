@@ -130,8 +130,8 @@ CREATE TABLE patient (
 CREATE TABLE patient_pii (
     patient_pii_id INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id INTEGER NOT NULL UNIQUE,
-    first_name TEXT NOT NULL, -- Application must Encrypt
-    last_name TEXT NOT NULL,  -- Application must Encrypt
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
     date_of_birth TEXT NOT NULL,
     tin TEXT NOT NULL UNIQUE,
     phone_number TEXT,
