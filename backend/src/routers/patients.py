@@ -7,7 +7,9 @@ from ..database import get_session
 from ..services.export import (
     generate_care_plan_summary_text,
     generate_care_plan_summary_json,
-    get_group_office_payload_mock,
+    create_group_office_note,
+    update_group_office_note,
+    format_for_group_office,
 )
 from ..models import (
     Patient,
@@ -40,6 +42,12 @@ def get_patients(tin: str | None = None, session: Session = Depends(get_session)
     for patient, pii in results:
         pii.first_name = decrypt_data(pii.first_name)
         pii.last_name = decrypt_data(pii.last_name)
+        pii.date_of_birth = decrypt_data(pii.date_of_birth)
+        pii.tin = decrypt_data(pii.tin)
+        if pii.phone_number:
+            pii.phone_number = decrypt_data(pii.phone_number)
+        if pii.address:
+            pii.address = decrypt_data(pii.address)
         patient_details = patient.model_dump()
         patient_details.update(pii.model_dump())
         patient_details_list.append(PatientReadDetails(**patient_details))
@@ -70,10 +78,14 @@ def create_patient(
         pii_data = {
             "first_name": encrypt_data(patient_data.first_name),
             "last_name": encrypt_data(patient_data.last_name),
-            "date_of_birth": patient_data.date_of_birth,
-            "tin": patient_data.tin,
-            "phone_number": patient_data.phone_number,
-            "address": patient_data.address,
+            "date_of_birth": encrypt_data(str(patient_data.date_of_birth)),
+            "tin": encrypt_data(patient_data.tin),
+            "phone_number": encrypt_data(patient_data.phone_number)
+            if patient_data.phone_number
+            else None,
+            "address": encrypt_data(patient_data.address)
+            if patient_data.address
+            else None,
         }
 
         new_patient = Patient()
@@ -105,6 +117,12 @@ def create_patient(
 
         new_pii.first_name = decrypt_data(new_pii.first_name)
         new_pii.last_name = decrypt_data(new_pii.last_name)
+        new_pii.date_of_birth = decrypt_data(new_pii.date_of_birth)
+        new_pii.tin = decrypt_data(new_pii.tin)
+        if new_pii.phone_number:
+            new_pii.phone_number = decrypt_data(new_pii.phone_number)
+        if new_pii.address:
+            new_pii.address = decrypt_data(new_pii.address)
 
         patient_details = new_patient.model_dump()
         patient_details.update(new_pii.model_dump())
@@ -137,6 +155,12 @@ def get_patient_details(patient_id: int, session: Session = Depends(get_session)
     # Decrypt PII before returning
     pii.first_name = decrypt_data(pii.first_name)
     pii.last_name = decrypt_data(pii.last_name)
+    pii.date_of_birth = decrypt_data(pii.date_of_birth)
+    pii.tin = decrypt_data(pii.tin)
+    if pii.phone_number:
+        pii.phone_number = decrypt_data(pii.phone_number)
+    if pii.address:
+        pii.address = decrypt_data(pii.address)
 
     # Combine the two models into the response
     patient_details = patient.model_dump()
@@ -189,10 +213,12 @@ def update_patient_pii(
     # Note: PII encryption should happen here
     pii.first_name = encrypt_data(patient_data.first_name)  # ENCRYPT
     pii.last_name = encrypt_data(patient_data.last_name)  # ENCRYPT
-    pii.date_of_birth = patient_data.date_of_birth
-    pii.phone_number = patient_data.phone_number
-    pii.address = patient_data.address
-    pii.tin = patient_data.tin
+    pii.date_of_birth = encrypt_data(str(patient_data.date_of_birth))
+    pii.tin = encrypt_data(patient_data.tin)
+    pii.phone_number = (
+        encrypt_data(patient_data.phone_number) if patient_data.phone_number else None
+    )
+    pii.address = encrypt_data(patient_data.address) if patient_data.address else None
 
     session.add(pii)
 
@@ -233,6 +259,12 @@ def update_patient_pii(
     # Decrypt PII before returning
     pii.first_name = decrypt_data(pii.first_name)
     pii.last_name = decrypt_data(pii.last_name)
+    pii.date_of_birth = decrypt_data(pii.date_of_birth)
+    pii.tin = decrypt_data(pii.tin)
+    if pii.phone_number:
+        pii.phone_number = decrypt_data(pii.phone_number)
+    if pii.address:
+        pii.address = decrypt_data(pii.address)
 
     patient_details = patient.model_dump()
     patient_details.update(pii.model_dump())
@@ -270,6 +302,7 @@ def delete_patient(patient_id: int, session: Session = Depends(get_session)):
 @router.get("/{patient_id}/export")
 def export_patient_data(
     patient_id: int,
+    response: Response,
     export_format: str = "txt",
     destination: str = "download",
     session: Session = Depends(get_session),
@@ -320,10 +353,43 @@ def export_patient_data(
     # Ensure content is stringified for file-based destinations
     content_string = response_data
     if not isinstance(content_string, str):
-        content_string = json.dumps(response_data, indent=2)
+        content_string = json.dumps(response_data)
 
     if destination == "group_office":
-        return get_group_office_payload_mock(str(patient.patient_uuid), content_string)
+        note_title = f"Care Plan: {patient_name}"
+
+        note_content = content_string
+        if export_format == "txt":
+            note_content = format_for_group_office(content_string)
+
+        try:
+            if patient.group_office_note_id is None:
+                # Create new note
+                note_id = create_group_office_note(note_title, note_content)
+                patient.group_office_note_id = note_id
+                session.add(patient)
+                session.commit()
+                session.refresh(patient)
+                response.status_code = status.HTTP_201_CREATED
+                return {"status": "success", "action": "created", "note_id": note_id}
+            else:
+                # Update existing note
+                update_group_office_note(
+                    patient.group_office_note_id, note_title, note_content
+                )
+                response.status_code = status.HTTP_200_OK
+                return {
+                    "status": "success",
+                    "action": "updated",
+                    "note_id": patient.group_office_note_id,
+                }
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Group Office integration failed: {str(e)}",
+            )
 
     if destination == "preview":
         # Return raw JSON dict or raw Text string directly
