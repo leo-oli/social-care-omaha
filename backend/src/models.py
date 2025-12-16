@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 from sqlmodel import Field, Relationship, SQLModel, Column, DateTime
 
