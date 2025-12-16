@@ -133,7 +133,7 @@ CREATE TABLE patient_pii (
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
     date_of_birth TEXT NOT NULL,
-    tin TEXT NOT NULL UNIQUE,
+    tin TEXT NOT NULL,
     phone_number TEXT,
     address TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

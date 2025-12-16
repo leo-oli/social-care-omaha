@@ -75,6 +75,15 @@ def create_patient(
                     detail=f"Mandatory consent {mid} missing or denied.",
                 )
 
+        # Check if TIN is unique (iterate and decrypt due to non-deterministic encryption)
+        existing_tins = session.exec(select(PatientPII.tin)).all()
+        for existing_tin in existing_tins:
+            if decrypt_data(existing_tin) == patient_data.tin:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Patient with this TIN already exists",
+                )
+
         pii_data = {
             "first_name": encrypt_data(patient_data.first_name),
             "last_name": encrypt_data(patient_data.last_name),
@@ -128,6 +137,9 @@ def create_patient(
         patient_details.update(new_pii.model_dump())
 
         return PatientReadDetails(**patient_details)
+    except HTTPException:
+        session.rollback()
+        raise
     except Exception as e:
         session.rollback()
         raise HTTPException(
