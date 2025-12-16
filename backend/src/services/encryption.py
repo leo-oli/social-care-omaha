@@ -4,7 +4,10 @@ from src.config import settings
 
 def get_key():
     if not settings.ENCRYPTION_KEY:
-        raise ValueError("ENCRYPTION_KEY not found in environment variables")
+        # Fallback to a default key for development if not set in environment
+        default_key = "peAXC9BBUlmxE9i7UmNpItcR1Bp6O1PvCXpPnhHKsO4="
+        print(f"WARNING: Using default encryption key. Set ENCRYPTION_KEY environment variable for production.")
+        return default_key.encode()
     return settings.ENCRYPTION_KEY.encode()
 
 

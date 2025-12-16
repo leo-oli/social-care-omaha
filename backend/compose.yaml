@@ -4,7 +4,7 @@ services:
             context: .
             target: dev  # prod
         environment:
-            ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+            ENCRYPTION_KEY: peAXC9BBUlmxE9i7UmNpItcR1Bp6O1PvCXpPnhHKsO4=
         ports:
             - 8000:8000
         volumes:
