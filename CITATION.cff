@@ -5,6 +5,8 @@ authors:
   - family-names: "Oliinyk"
     given-names: "Leonid"
     orcid: "https://orcid.org/0009-0000-9392-2271"
+  - family-names: "Kiazimovaitė"
+    given-names: "Adrija"
 repository-code: "https://github.com/leo-oli/social-care-omaha"
 version: "1.0.0"
 date-released: "2025-12-18"
