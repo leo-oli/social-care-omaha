@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import './App.css';
 import { api } from './api.js';
 
+const API_BASE_URL = 'http://localhost:8000';
+
 function App() {
   // Patient information state
   const [patientInfo, setPatientInfo] = useState({
@@ -75,7 +77,7 @@ function App() {
   useEffect(() => {
     const checkBackendHealth = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/v1/health');
+        const response = await fetch(`${API_BASE_URL}/api/v1/health`);
         if (response.ok) {
           setBackendHealth({
             isOnline: true,
@@ -106,7 +108,7 @@ function App() {
   // ============ FETCH CONSENT DEFINITIONS ============
   useEffect(() => {
     // Fetch consent definitions immediately when component mounts
-    fetch('http://localhost:8000/api/v1/static/consent-definitions')
+    fetch(`${API_BASE_URL}/api/v1/static/consent-definitions`)
       .then(response => response.json())
       .then(data => {
         console.log('Consent definitions loaded:', data.length);
@@ -137,14 +139,14 @@ function App() {
       setLoading(true);
 
       // Load domains
-      fetch('http://localhost:8000/api/v1/static/domains')
+      fetch(`${API_BASE_URL}/api/v1/static/domains`)
         .then(response => response.json())
         .then(data => {
           console.log('Domains loaded:', data.length);
           setDomains(data);
 
           // Load modifier types
-          return fetch('http://localhost:8000/api/v1/static/modifier-types');
+          return fetch(`${API_BASE_URL}/api/v1/static/modifier-types`);
         })
         .then(response => response.json())
         .then(data => {
@@ -152,7 +154,7 @@ function App() {
           setModifierTypes(data);
 
           // Load modifier domains
-          return fetch('http://localhost:8000/api/v1/static/modifier-domains');
+          return fetch(`${API_BASE_URL}/api/v1/static/modifier-domains`);
         })
         .then(response => response.json())
         .then(data => {
@@ -160,7 +162,7 @@ function App() {
           setModifierDomains(data);
 
           // Load intervention categories
-          return fetch('http://localhost:8000/api/v1/static/intervention-categories');
+          return fetch(`${API_BASE_URL}/api/v1/static/intervention-categories`);
         })
         .then(response => response.json())
         .then(data => {
@@ -168,7 +170,7 @@ function App() {
           setInterventionCategories(data);
 
           // Load intervention targets
-          return fetch('http://localhost:8000/api/v1/static/intervention-targets');
+          return fetch(`${API_BASE_URL}/api/v1/static/intervention-targets`);
         })
         .then(response => response.json())
         .then(data => {
@@ -176,7 +178,7 @@ function App() {
           setInterventionTargets(data);
 
           // Load outcome ratings
-          return fetch('http://localhost:8000/api/v1/static/outcome-ratings');
+          return fetch(`${API_BASE_URL}/api/v1/static/outcome-ratings`);
         })
         .then(response => response.json())
         .then(data => {
@@ -196,7 +198,7 @@ function App() {
   useEffect(() => {
     if (currentDomain) {
       setLoading(true);
-      fetch(`http://localhost:8000/api/v1/static/problems?domain_id=${currentDomain}`)
+      fetch(`${API_BASE_URL}/api/v1/static/problems?domain_id=${currentDomain}`)
         .then(response => response.json())
         .then(data => {
           console.log('Problems loaded for domain', currentDomain, ':', data.length);
@@ -215,7 +217,7 @@ function App() {
   // Fetch symptoms when problem is selected
   useEffect(() => {
     if (currentProblem) {
-      fetch(`http://localhost:8000/api/v1/static/symptoms?problem_id=${currentProblem}`)
+      fetch(`${API_BASE_URL}/api/v1/static/symptoms?problem_id=${currentProblem}`)
         .then(response => response.json())
         .then(data => {
           console.log('Symptoms loaded:', data.length);
