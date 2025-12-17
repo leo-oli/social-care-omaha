@@ -34,12 +34,10 @@ def get_patients(tin: str | None = None, session: Session = Depends(get_session)
         .where(Patient.deleted_at == None)  # noqa: E711
     )
 
-    if tin:
-        query = query.where(PatientPII.tin == tin)
-
     results = session.exec(query).all()
     patient_details_list = []
     for patient, pii in results:
+        # Decrypt PII first
         pii.first_name = decrypt_data(pii.first_name)
         pii.last_name = decrypt_data(pii.last_name)
         pii.date_of_birth = decrypt_data(pii.date_of_birth)
@@ -48,9 +46,17 @@ def get_patients(tin: str | None = None, session: Session = Depends(get_session)
             pii.phone_number = decrypt_data(pii.phone_number)
         if pii.address:
             pii.address = decrypt_data(pii.address)
-        patient_details = patient.model_dump()
-        patient_details.update(pii.model_dump())
-        patient_details_list.append(PatientReadDetails(**patient_details))
+
+        # Filter by TIN after decryption (if tin parameter is provided)
+        if tin:
+            if pii.tin == tin:
+                patient_details = patient.model_dump()
+                patient_details.update(pii.model_dump())
+                patient_details_list.append(PatientReadDetails(**patient_details))
+        else:
+            patient_details = patient.model_dump()
+            patient_details.update(pii.model_dump())
+            patient_details_list.append(PatientReadDetails(**patient_details))
     return patient_details_list
 
 
