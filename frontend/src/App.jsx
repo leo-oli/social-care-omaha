@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import './App.css';
 import { api } from './api.js';
 
@@ -22,6 +22,8 @@ function App() {
   });
   
   const [showUserIdInput, setShowUserIdInput] = useState(true);
+  const [showSelectPatient, setShowSelectPatient] = useState(false);
+  const [showPatientProblems, setShowPatientProblems] = useState(false);
   const [currentDomain, setCurrentDomain] = useState(null);
   const [currentProblem, setCurrentProblem] = useState(null);
   const [currentSection, setCurrentSection] = useState(null);
@@ -30,10 +32,18 @@ function App() {
   const [currentPatientId, setCurrentPatientId] = useState(null);
   // eslint-disable-next-line no-unused-vars
   const [patientProblems, setPatientProblems] = useState({});
+  const [patientProblemsList, setPatientProblemsList] = useState([]);
+  const [selectedProblemForDetails, setSelectedProblemForDetails] = useState(null);
+  const [showProblemDetails, setShowProblemDetails] = useState(false);
   
   // State for handling duplicate TIN
   const [duplicateTINError, setDuplicateTINError] = useState(null);
   const [existingPatient, setExistingPatient] = useState(null);
+  
+  // State for selecting existing patient
+  const [searchTIN, setSearchTIN] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchError, setSearchError] = useState(null);
   
   // Comparison state
   const [showComparisonView, setShowComparisonView] = useState(false);
@@ -41,6 +51,11 @@ function App() {
   const [selectedProblems, setSelectedProblems] = useState([]);
   const [comparisonData, setComparisonData] = useState({ older: null, newer: null });
   const [showComparisonResult, setShowComparisonResult] = useState(false);
+  
+  // Export modal state
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportFormat, setExportFormat] = useState('json');
+  const [exportDestination, setExportDestination] = useState('download');
   
   // Data from API
   const [domains, setDomains] = useState([]);
@@ -344,7 +359,8 @@ function App() {
     }
   };
 
-  const handleUserIdSubmit = async () => {
+  // Handler for "Start Assessment" button - creates new patient and goes to domain selection
+  const handleStartAssessment = async () => {
     // Reset error states
     setDuplicateTINError(null);
     setExistingPatient(null);
@@ -392,18 +408,13 @@ function App() {
       // Store patient ID for subsequent operations
       setCurrentPatientId(patient.patient_id);
       
-      // Clear all previous responses and data
-      setResponses({});
-      setPatientProblems({});
-      setCurrentDomain(null);
-      setCurrentProblem(null);
-      setCurrentSection(null);
-      setSelectedProblemDetails(null);
-      setSymptoms([]);
-      setProblems([]);
+      // Set up for domain selection (skip patient problems view)
       setShowUserIdInput(false);
+      setShowSelectPatient(false);
+      setShowPatientProblems(false);
+      // Domain selection will be shown automatically since currentDomain is null
       
-      console.log('Patient created successfully:', patient);
+      console.log('Patient created successfully for new assessment:', patient);
     } catch (error) {
       console.error('Error creating patient:', error);
       
@@ -422,9 +433,21 @@ function App() {
       setLoading(false);
     }
   };
+
+  // Handler for "Select Existing Patient" button - goes to patient selection page
+  const handleSelectExistingPatient = () => {
+    // Reset error states
+    setDuplicateTINError(null);
+    setExistingPatient(null);
+    
+    // Show the patient selection view
+    setShowSelectPatient(true);
+  };
+
   
   // Function to use existing patient
   const handleUseExistingPatient = () => {
+    console.log('handleUseExistingPatient called with existingPatient:', existingPatient);
     if (existingPatient) {
       setCurrentPatientId(existingPatient.patient_id);
       
@@ -443,16 +466,9 @@ function App() {
       setDuplicateTINError(null);
       setExistingPatient(null);
       
-      // Clear all previous responses and data
-      setResponses({});
-      setPatientProblems({});
-      setCurrentDomain(null);
-      setCurrentProblem(null);
-      setCurrentSection(null);
-      setSelectedProblemDetails(null);
-      setSymptoms([]);
-      setProblems([]);
-      setShowUserIdInput(false);
+      console.log('About to call handlePatientSelected from handleUseExistingPatient');
+      // Use the unified patient selection handler
+      handlePatientSelected();
     }
   };
   
@@ -464,6 +480,251 @@ function App() {
       ...prev,
       tin: ''
     }));
+  };
+  
+  // Function to search for patients by TIN
+  const handleSearchPatient = async () => {
+    if (!searchTIN || searchTIN.length !== 11) {
+      setSearchError('Please enter a valid 11-digit TIN');
+      return;
+    }
+    
+    setLoading(true);
+    setSearchError(null);
+    
+    try {
+      const response = await api.getPatients(searchTIN);
+      const patients = response.data;
+      
+      if (patients.length === 0) {
+        setSearchError('No patient found with this TIN');
+        setSearchResults([]);
+      } else {
+        setSearchResults(patients);
+        setSearchError(null);
+      }
+    } catch (error) {
+      console.error('Error searching for patient:', error);
+      setSearchError('Error searching for patient: ' + (error.response?.data?.detail || error.message || 'Unknown error'));
+      setSearchResults([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Function to select a patient from search results
+  const handleSelectPatient = (patient) => {
+    console.log('handleSelectPatient called with patient:', patient);
+    setCurrentPatientId(patient.patient_id);
+    
+    // Update client info with selected patient data
+    setClientInfo({
+      firstName: patient.first_name,
+      lastName: patient.last_name,
+      dateOfBirth: patient.date_of_birth,
+      phoneNumber: patient.phone_number || '',
+      address: patient.address || '',
+      tin: patient.tin,
+      consents: clientInfo.consents // Keep current consents
+    });
+    
+    // Reset search states
+    setSearchTIN('');
+    setSearchResults([]);
+    setSearchError(null);
+    setShowSelectPatient(false);
+    
+    // For existing patients, always show the problems view
+    // This will trigger the useEffect to fetch and display patient problems
+    setShowUserIdInput(false);
+    setShowPatientProblems(true);
+  };
+  
+  // Function to go back from select patient view
+  const handleBackFromSelectPatient = () => {
+    setSearchTIN('');
+    setSearchResults([]);
+    setSearchError(null);
+    setShowSelectPatient(false);
+  };
+
+  // Function to fetch patient problems
+  const fetchPatientProblems = useCallback(async () => {
+    console.log('=== fetchPatientProblems called ===');
+    console.log('currentPatientId:', currentPatientId);
+    if (!currentPatientId) {
+      console.log('No currentPatientId, returning early');
+      return [];
+    }
+    console.log('currentPatientId exists, proceeding with API call');
+    
+    setLoading(true);
+    try {
+      // Use the care plan endpoint instead which includes all related data
+      console.log('Calling api.getCarePlan with patient ID:', currentPatientId);
+      const response = await api.getCarePlan(currentPatientId);
+      console.log('Care plan response:', response);
+      console.log('Response data:', response.data);
+      
+      let problems = response.data.active_problems || [];
+      console.log('Patient problems from care plan:', problems);
+      console.log('Number of problems:', problems.length);
+      
+      // Fetch scores for each problem to get the actual rating values
+      if (problems.length > 0) {
+        console.log('Fetching scores for each problem...');
+        
+        // Create an array of promises to fetch scores for each problem
+        const scorePromises = problems.map(async (problem) => {
+          try {
+            console.log(`Fetching scores for problem ${problem.patient_problem_id}`);
+            const scoresResponse = await api.getProblemScores(currentPatientId, problem.patient_problem_id);
+            console.log(`Scores for problem ${problem.patient_problem_id}:`, scoresResponse.data);
+            
+            // Get the latest score (first in the array as they're ordered by date_recorded DESC)
+            const latestScore = scoresResponse.data.length > 0 ? scoresResponse.data[0] : null;
+            
+            // Map rating IDs to labels using the outcomeRatings state
+            let outcomeData = {
+              status: 'Not recorded',
+              knowledge: 'Not recorded',
+              behavior: 'Not recorded'
+            };
+            
+            if (latestScore) {
+              console.log('Latest score found:', latestScore);
+              // The API already includes rating labels in the score object
+              // Use them directly if available, otherwise fall back to mapping
+              outcomeData = {
+                status: latestScore.status_rating?.rating_status_label || getRatingLabel(latestScore.status_rating?.rating_status_id, 'status'),
+                knowledge: latestScore.knowledge_rating?.rating_knowledge_label || getRatingLabel(latestScore.knowledge_rating?.rating_knowledge_id, 'knowledge'),
+                behavior: latestScore.behavior_rating?.rating_behavior_label || getRatingLabel(latestScore.behavior_rating?.rating_behavior_id, 'behavior')
+              };
+              console.log('Mapped outcome data:', outcomeData);
+            }
+            
+            return {
+              ...problem,
+              latest_score: latestScore,
+              outcomeData: outcomeData
+            };
+          } catch (error) {
+            console.error(`Error fetching scores for problem ${problem.patient_problem_id}:`, error);
+            // Return the problem without scores if there's an error
+            return {
+              ...problem,
+              latest_score: null,
+              outcomeData: {
+                status: 'Not recorded',
+                knowledge: 'Not recorded',
+                behavior: 'Not recorded'
+              }
+            };
+          }
+        });
+        
+        // Wait for all score fetches to complete
+        problems = await Promise.all(scorePromises);
+        console.log('Problems with scores:', problems);
+      }
+      
+      // Ensure we have an array even if undefined
+      setPatientProblemsList(Array.isArray(problems) ? problems : []);
+      return Array.isArray(problems) ? problems : [];
+    } catch (error) {
+      console.error('Error fetching patient problems:', error);
+      console.error('Error response:', error.response);
+      alert('Error fetching patient problems: ' + (error.response?.data?.detail || error.message || 'Unknown error'));
+      setPatientProblemsList([]); // Ensure empty array on error
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  }, [currentPatientId]);
+
+  // Effect to fetch patient problems when showPatientProblems is true
+  useEffect(() => {
+    if (showPatientProblems && currentPatientId) {
+      console.log('useEffect triggered: showPatientProblems is true and currentPatientId exists');
+      fetchPatientProblems();
+    }
+  }, [showPatientProblems, currentPatientId, fetchPatientProblems]);
+
+  // Function to handle patient selection (both from search and existing patient)
+  const handlePatientSelected = () => {
+    console.log('handlePatientSelected called');
+    // Clear all previous responses and data
+    setResponses({});
+    setPatientProblems({});
+    setCurrentDomain(null);
+    setCurrentProblem(null);
+    setCurrentSection(null);
+    setSelectedProblemDetails(null);
+    setSymptoms([]);
+    setProblems([]);
+    setShowUserIdInput(false);
+    setShowSelectPatient(false);
+    
+    // Check if patient has existing problems
+    if (currentPatientId) {
+      console.log('Checking if patient has existing problems...');
+      fetchPatientProblems().then(problems => {
+        if (problems && problems.length > 0) {
+          console.log('Patient has existing problems, showing problems view');
+          setShowPatientProblems(true);
+        } else {
+          console.log('Patient has no existing problems, showing domain selection');
+          setShowPatientProblems(false);
+          // Domain selection will be shown automatically since currentDomain is null
+        }
+      });
+    }
+  };
+
+  // Function to handle "Add New Problem" button
+  const handleAddNewProblem = () => {
+    setShowPatientProblems(false);
+    setCurrentDomain(null); // Reset domain to show domain selection
+    // Show domain selection (existing flow)
+  };
+
+  // Function to handle viewing problem details
+  const handleViewProblemDetails = (problem) => {
+    setSelectedProblemForDetails(problem);
+    setShowProblemDetails(true);
+    setShowPatientProblems(false);
+  };
+
+  // Function to handle back from problem details
+  const handleBackFromProblemDetails = () => {
+    setShowProblemDetails(false);
+    setSelectedProblemForDetails(null);
+    setShowPatientProblems(true);
+  };
+
+  // Function to handle updating problem active status
+  const handleUpdateProblemStatus = async (problem, isActive) => {
+    try {
+      await api.updatePatientProblem(currentPatientId, problem.patient_problem_id, { is_active: isActive });
+      alert(`Problem marked as ${isActive ? 'active' : 'inactive'}`);
+      fetchPatientProblems(); // Refresh the list
+    } catch (error) {
+      console.error('Error updating problem status:', error);
+      alert('Error updating problem status: ' + (error.response?.data?.detail || error.message || 'Unknown error'));
+    }
+  };
+
+  // Function to handle adding new outcome score
+  // eslint-disable-next-line no-unused-vars
+  const handleAddOutcomeScore = async (problem, scoreData) => {
+    try {
+      await api.createOutcomeScore(currentPatientId, problem.patient_problem_id, scoreData);
+      alert('New assessment score added successfully!');
+      fetchPatientProblems(); // Refresh the list
+    } catch (error) {
+      console.error('Error adding outcome score:', error);
+      alert('Error adding assessment score: ' + (error.response?.data?.detail || error.message || 'Unknown error'));
+    }
   };
 
   const handleNewAssessment = () => {
@@ -486,6 +747,7 @@ function App() {
     setProblems([]);
     setCurrentPatientId(null);
     setPatientProblems({});
+    setShowPatientProblems(false); // Hide patient problems view
     // Reset comparison state
     setShowComparisonView(false);
     setShowComparisonResult(false);
@@ -584,12 +846,142 @@ function App() {
     }
   };
   
+  // Handler for rating-only assessment (for existing problems)
+  const handleSubmitRatingOnly = async () => {
+    try {
+      const problemData = responses[currentDomain]?.[currentProblem];
+      
+      if (!problemData?.ratingStatus || !problemData?.ratingKnowledge || !problemData?.ratingBehavior) {
+        alert('Please complete all rating fields (Status, Knowledge, and Behavior)');
+        return;
+      }
+      
+      setLoading(true);
+      
+      // Add outcome score to existing problem
+      const scoreData = {
+        phase_id: 1, // Default phase ID
+        rating_knowledge_id: getRatingId(problemData.ratingKnowledge, 'knowledge'),
+        rating_behavior_id: getRatingId(problemData.ratingBehavior, 'behavior'),
+        rating_status_id: getRatingId(problemData.ratingStatus, 'status')
+      };
+      
+      await api.createOutcomeScore(currentPatientId, selectedProblemForDetails.patient_problem_id, scoreData);
+      console.log('New outcome score added to existing problem');
+      
+      alert('Assessment rating saved successfully!');
+      
+      // Go back to problem details
+      setCurrentSection(null);
+      setCurrentProblem(null);
+      setShowProblemDetails(true);
+      
+    } catch (error) {
+      console.error('Error in handleSubmitRatingOnly:', error);
+      alert('Error saving assessment rating: ' + (error.response?.data?.detail || error.message || 'Unknown error'));
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Handler for updating problem (creates new problem with updated ratings)
+  const handleSubmitUpdateProblem = async () => {
+    try {
+      const problemData = responses[currentDomain]?.[currentProblem];
+      
+      if (!problemData?.ratingStatus || !problemData?.ratingKnowledge || !problemData?.ratingBehavior) {
+        alert('Please complete all rating fields (Status, Knowledge, and Behavior)');
+        return;
+      }
+      
+      setLoading(true);
+      
+      // 1. Create a new patient problem with the same details as the existing problem
+      const problemCreateData = {
+        problem_id: parseInt(currentProblem),
+        modifier_domain_id: selectedProblemForDetails.modifier_domain_id,
+        modifier_type_id: selectedProblemForDetails.modifier_type_id
+      };
+      
+      const problemResponse = await api.createPatientProblem(currentPatientId, problemCreateData);
+      const newPatientProblem = problemResponse.data;
+      console.log('New patient problem created for update:', newPatientProblem);
+      
+      // 2. Copy symptoms from the existing problem to the new problem
+      if (selectedProblemForDetails.symptoms && selectedProblemForDetails.symptoms.length > 0) {
+        for (const symptom of selectedProblemForDetails.symptoms) {
+          const symptomData = {
+            symptom_id: symptom.symptom_id,
+            symptom_comment: symptom.symptom_comment || null
+          };
+          await api.addSymptomToProblem(currentPatientId, newPatientProblem.patient_problem_id, symptomData);
+        }
+        console.log('Symptoms copied to new problem');
+      }
+      
+      // 3. Copy interventions from the existing problem to the new problem
+      if (selectedProblemForDetails.interventions && selectedProblemForDetails.interventions.length > 0) {
+        for (const intervention of selectedProblemForDetails.interventions) {
+          const interventionData = {
+            category_id: intervention.category_id,
+            target_id: intervention.target_id,
+            specific_details: intervention.specific_details || null
+          };
+          await api.createIntervention(currentPatientId, newPatientProblem.patient_problem_id, interventionData);
+        }
+        console.log('Interventions copied to new problem');
+      }
+      
+      // 4. Add the new outcome score to the new problem
+      const scoreData = {
+        phase_id: 1, // Default phase ID
+        rating_knowledge_id: getRatingId(problemData.ratingKnowledge, 'knowledge'),
+        rating_behavior_id: getRatingId(problemData.ratingBehavior, 'behavior'),
+        rating_status_id: getRatingId(problemData.ratingStatus, 'status')
+      };
+      
+      await api.createOutcomeScore(currentPatientId, newPatientProblem.patient_problem_id, scoreData);
+      console.log('New outcome score added to updated problem');
+      
+      // 5. Mark the original problem as inactive
+      await api.updatePatientProblem(currentPatientId, selectedProblemForDetails.patient_problem_id, { is_active: false });
+      console.log('Original problem marked as inactive');
+      
+      alert('Problem updated successfully! A new problem record has been created with updated ratings.');
+      
+      // Go back to problems view to see the updated list
+      setCurrentSection(null);
+      setCurrentProblem(null);
+      setShowProblemDetails(false);
+      setShowPatientProblems(true);
+      fetchPatientProblems(); // Refresh the problems list
+      
+    } catch (error) {
+      console.error('Error in handleSubmitUpdateProblem:', error);
+      alert('Error updating problem: ' + (error.response?.data?.detail || error.message || 'Unknown error'));
+    } finally {
+      setLoading(false);
+    }
+  };
+  
   // Helper function to get rating ID from label
   const getRatingId = (label, type) => {
     if (!outcomeRatings || !outcomeRatings[type]) return 1;
     
     const rating = outcomeRatings[type].find(r => r[`rating_${type}_label`] === label);
     return rating ? rating[`rating_${type}_id`] : 1;
+  };
+
+  // Helper function to get rating label from ID
+  const getRatingLabel = (ratingId, type) => {
+    if (!outcomeRatings || !outcomeRatings[type]) {
+      console.log(`Missing outcomeRatings for type ${type}:`, outcomeRatings);
+      return 'Not recorded';
+    }
+    
+    const rating = outcomeRatings[type].find(r => r[`rating_${type}_id`] === ratingId);
+    console.log(`Looking for ${type} rating with ID ${ratingId}:`, rating);
+    return rating ? rating[`rating_${type}_label`] : 'Not recorded';
   };
 
   const exportToJson = async () => {
@@ -599,39 +991,58 @@ function App() {
       return;
     }
     
-    // If we have a patient ID, try to export from backend
+    // If we have a patient ID, show export modal
     if (currentPatientId) {
-      try {
-        setLoading(true);
-        
-        // Get the care plan as JSON from backend
-        const response = await api.exportPatientData(currentPatientId, 'json', 'download');
-        console.log('Export data:', response.data);
-        
-        // Create and download JSON file
-        const jsonData = typeof response.data === 'string' ? response.data : JSON.stringify(response.data, null, 2);
-        const blob = new Blob([jsonData], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        const fileName = `patient_data_${clientInfo.firstName}_${clientInfo.lastName}_${Date.now()}.json`;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
-        alert('Patient data exported as JSON successfully!');
-        
-      } catch (error) {
-        console.error('Error exporting JSON from backend:', error);
-        alert('Error exporting JSON: ' + (error.response?.data?.detail || error.message || 'Unknown error'));
-      } finally {
-        setLoading(false);
-      }
+      setShowExportModal(true);
     } else {
       alert('No patient data to export. Please complete an assessment first.');
     }
+  };
+
+  const handleExportConfirm = async () => {
+    try {
+      setLoading(true);
+      setShowExportModal(false);
+      
+      // Get the care plan from backend
+      const response = await api.exportPatientData(currentPatientId, exportFormat, 'download');
+      console.log('Export data:', response.data);
+      
+      let blob, fileName, mimeType;
+      
+      if (exportFormat === 'json') {
+        const jsonData = typeof response.data === 'string' ? response.data : JSON.stringify(response.data, null, 2);
+        blob = new Blob([jsonData], { type: 'application/json' });
+        fileName = `patient_data_${clientInfo.firstName}_${clientInfo.lastName}_${Date.now()}.json`;
+        mimeType = 'application/json';
+      } else if (exportFormat === 'txt') {
+        const textData = typeof response.data === 'string' ? response.data : JSON.stringify(response.data, null, 2);
+        blob = new Blob([textData], { type: 'text/plain' });
+        fileName = `patient_data_${clientInfo.firstName}_${clientInfo.lastName}_${Date.now()}.txt`;
+        mimeType = 'text/plain';
+      }
+      
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      alert(`Patient data exported as ${exportFormat.toUpperCase()} successfully!`);
+      
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      alert('Error exporting: ' + (error.response?.data?.detail || error.message || 'Unknown error'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExportCancel = () => {
+    setShowExportModal(false);
   };
 
   const handleReset = () => {
@@ -659,6 +1070,18 @@ function App() {
       const outcomeRatings = outcomeRatingsResponse.data;
       console.log('Outcome ratings loaded:', outcomeRatings);
       
+      // Create a local function to get rating labels using the fetched data directly
+      const getRatingLabelFromData = (ratingId, type) => {
+        if (!outcomeRatings || !outcomeRatings[type]) {
+          console.log(`Missing outcomeRatings for type ${type}:`, outcomeRatings);
+          return 'Not recorded';
+        }
+        
+        const rating = outcomeRatings[type].find(r => r[`rating_${type}_id`] === ratingId);
+        console.log(`Looking for ${type} rating with ID ${ratingId}:`, rating);
+        return rating ? rating[`rating_${type}_label`] : 'Not recorded';
+      };
+      
       // Get care plan which includes all problems with their details
       const response = await api.getCarePlan(currentPatientId);
       const problems = response.data.active_problems || [];
@@ -666,111 +1089,127 @@ function App() {
       
       // Extract all scores with their dates for each problem
       const problemScores = [];
-      problems.forEach(problem => {
-        console.log('Processing problem:', problem);
-        console.log('Problem structure:', JSON.stringify(problem, null, 2));
+      
+      // First fetch scores for each problem to get actual rating values
+      if (problems.length > 0) {
+        console.log('Fetching scores for comparison problems...');
         
-        // Handle both care plan and export JSON structures
-        // For care plan API: problem.modifier_domain.modifier_domain_name
-        // For export JSON: problem.domain
-        const domainName = problem.modifier_domain?.modifier_domain_name ||
-                         problem.domain ||
-                         problem.modifier_domain ||
-                         'Unknown';
-        // For care plan API: problem.modifier_type.modifier_type_name
-        // For export JSON: problem.type
-        const modifierTypeName = problem.modifier_type?.modifier_type_name ||
-                               problem.type ||
-                               problem.modifier_type ||
-                               'Unknown';
-        const problemName = problem.problem_name ||
-                           problem.problem?.problem_name ||
-                           'Unknown Problem';
-        
-        // Check for different possible outcome data structures
-        let outcomeData = null;
-        let dateRecorded = null;
-        
-        // Try to find outcome data in different locations
-        if (problem.latest_outcome) {
-          console.log('Found latest_outcome:', problem.latest_outcome);
-          outcomeData = {
-            status: problem.latest_outcome.status,
-            knowledge: problem.latest_outcome.knowledge,
-            behavior: problem.latest_outcome.behavior
-          };
-          dateRecorded = problem.latest_outcome.date_recorded;
-        } else if (problem.latest_score) {
-          console.log('Found latest_score:', problem.latest_score);
-          // Check if latest_score has rating IDs but no rating objects
-          if (problem.latest_score.rating_status_id && !problem.latest_score.status_rating) {
-            // We have rating IDs but no rating objects - need to map IDs to labels
-            // Use the outcomeRatings data that was loaded earlier
-            const statusRating = outcomeRatings?.status?.find(r => r.rating_status_id === problem.latest_score.rating_status_id);
-            const knowledgeRating = outcomeRatings?.knowledge?.find(r => r.rating_knowledge_id === problem.latest_score.rating_knowledge_id);
-            const behaviorRating = outcomeRatings?.behavior?.find(r => r.rating_behavior_id === problem.latest_score.rating_behavior_id);
+        // Create an array of promises to fetch scores for each problem
+        const scorePromises = problems.map(async (problem) => {
+          try {
+            console.log(`Fetching scores for comparison problem ${problem.patient_problem_id}`);
+            const scoresResponse = await api.getProblemScores(currentPatientId, problem.patient_problem_id);
+            console.log(`Scores for comparison problem ${problem.patient_problem_id}:`, scoresResponse.data);
             
-            outcomeData = {
-              status: statusRating?.rating_status_label || 'Not recorded',
-              knowledge: knowledgeRating?.rating_knowledge_label || 'Not recorded',
-              behavior: behaviorRating?.rating_behavior_label || 'Not recorded'
+            // Get the latest score (first in the array as they're ordered by date_recorded DESC)
+            const latestScore = scoresResponse.data.length > 0 ? scoresResponse.data[0] : null;
+            
+            // Map rating IDs to labels using the local function with fetched outcomeRatings data
+            let outcomeData = {
+              status: 'Not recorded',
+              knowledge: 'Not recorded',
+              behavior: 'Not recorded'
             };
-          } else {
-            // Use rating objects if available
-            outcomeData = {
-              status: problem.latest_score.status_rating?.rating_status_label || 'Not recorded',
-              knowledge: problem.latest_score.knowledge_rating?.rating_knowledge_label || 'Not recorded',
-              behavior: problem.latest_score.behavior_rating?.rating_behavior_label || 'Not recorded'
+            
+            if (latestScore) {
+              console.log('Latest score found:', latestScore);
+              // The API already includes the rating labels in the score object
+              // Use them directly if available, otherwise fall back to mapping
+              outcomeData = {
+                status: latestScore.status_rating?.rating_status_label || getRatingLabelFromData(latestScore.status_rating?.rating_status_id, 'status'),
+                knowledge: latestScore.knowledge_rating?.rating_knowledge_label || getRatingLabelFromData(latestScore.knowledge_rating?.rating_knowledge_id, 'knowledge'),
+                behavior: latestScore.behavior_rating?.rating_behavior_label || getRatingLabelFromData(latestScore.behavior_rating?.rating_behavior_id, 'behavior')
+              };
+              console.log('Mapped outcome data:', outcomeData);
+            }
+            
+            return {
+              ...problem,
+              latest_score: latestScore,
+              outcomeData: outcomeData
+            };
+          } catch (error) {
+            console.error(`Error fetching scores for comparison problem ${problem.patient_problem_id}:`, error);
+            // Return problem without scores if there's an error
+            return {
+              ...problem,
+              latest_score: null,
+              outcomeData: {
+                status: 'Not recorded',
+                knowledge: 'Not recorded',
+                behavior: 'Not recorded'
+              }
             };
           }
-          dateRecorded = problem.latest_score.date_recorded;
-        }
+        });
         
-        // Also check for scores array (from export JSON)
-        if (!outcomeData && problem.scores && problem.scores.length > 0) {
-          console.log('Found scores array:', problem.scores);
-          const latestScore = problem.scores[0]; // Assuming first is latest
-          outcomeData = {
-            status: latestScore.status || 'Not recorded',
-            knowledge: latestScore.knowledge || 'Not recorded',
-            behavior: latestScore.behavior || 'Not recorded'
-          };
-          dateRecorded = latestScore.date_recorded || dateRecorded;
-        }
+        // Wait for all score fetches to complete
+        const problemsWithScores = await Promise.all(scorePromises);
+        console.log('Problems with scores for comparison:', problemsWithScores);
         
-        // Handle symptoms from both structures
-        const symptoms = problem.symptoms ||
-                       problem.selected_symptoms ||
-                       [];
-        
-        // Handle interventions from both structures
-        const interventions = problem.all_interventions ||
-                           problem.interventions ||
-                           [];
-        
-        // Create a synthetic domain field for easier access in comparison
-        const syntheticProblemData = {
-          ...problem,
-          domain: domainName, // Add domain directly for comparison display
-          modifier_domain: domainName,
-          modifier_type: modifierTypeName,
-          // Add symptoms and interventions in the expected format
-          selected_symptoms: symptoms,
-          interventions: interventions
-        };
-        
-        problemScores.push({
-          patient_problem_id: problem.patient_problem_id || Math.random(),
-          problem_name: problemName,
-          date_recorded: dateRecorded || problem.created_at || new Date().toISOString(),
-          score_data: outcomeData || {
+        // Now process the problems with their scores
+        problemsWithScores.forEach(problem => {
+          console.log('Processing problem for comparison:', problem);
+          console.log('Problem structure:', JSON.stringify(problem, null, 2));
+          
+          // Handle both care plan and export JSON structures
+          // For care plan API: problem.modifier_domain.modifier_domain_name
+          // For export JSON: problem.domain
+          const domainName = problem.modifier_domain?.modifier_domain_name ||
+                           problem.domain ||
+                           problem.modifier_domain ||
+                           'Unknown';
+          // For care plan API: problem.modifier_type.modifier_type_name
+          // For export JSON: problem.type
+          const modifierTypeName = problem.modifier_type?.modifier_type_name ||
+                                 problem.type ||
+                                 problem.modifier_type ||
+                                 'Unknown';
+          const problemName = problem.problem_name ||
+                              problem.problem?.problem_name ||
+                              'Unknown Problem';
+          
+          // Use the outcomeData that was created when fetching scores
+          const outcomeData = problem.outcomeData || {
             status: 'Not recorded',
             knowledge: 'Not recorded',
             behavior: 'Not recorded'
-          },
-          problem_data: syntheticProblemData
+          };
+          
+          console.log('Using outcomeData for comparison:', outcomeData);
+          
+          const dateRecorded = problem.latest_score?.date_recorded || problem.created_at || new Date().toISOString();
+          
+          // Handle symptoms from both structures
+          const symptoms = problem.symptoms ||
+                         problem.selected_symptoms ||
+                         [];
+          
+          // Handle interventions from both structures
+          const interventions = problem.all_interventions ||
+                             problem.interventions ||
+                             [];
+          
+          // Create a synthetic domain field for easier access in comparison
+          const syntheticProblemData = {
+            ...problem,
+            domain: domainName, // Add domain directly for comparison display
+            modifier_domain: domainName,
+            modifier_type: modifierTypeName,
+            // Add symptoms and interventions in the expected format
+            selected_symptoms: symptoms,
+            interventions: interventions
+          };
+          
+          problemScores.push({
+            patient_problem_id: problem.patient_problem_id || Math.random(),
+            problem_name: problemName,
+            date_recorded: dateRecorded,
+            score_data: outcomeData, // Use the outcomeData directly
+            problem_data: syntheticProblemData
+          });
         });
-      });
+      }
       
       console.log('Final problemScores:', problemScores);
       
@@ -856,6 +1295,11 @@ function App() {
                   <p><strong>Domain modifier:</strong> {comparisonData.older.problem_data?.domain || 'Unknown'}</p>
                   <p><strong>Type modifier:</strong> {comparisonData.older.problem_data?.modifier_type || 'Unknown'}</p>
                   
+                  <h4>Problem Rating Scale for Outcomes</h4>
+                  <p><strong>Status:</strong> {comparisonData.older.score_data?.status || 'Not recorded'}</p>
+                  <p><strong>Knowledge:</strong> {comparisonData.older.score_data?.knowledge || 'Not recorded'}</p>
+                  <p><strong>Behavior:</strong> {comparisonData.older.score_data?.behavior || 'Not recorded'}</p>
+                  
                   <h4>Signs & Symptoms</h4>
                   {comparisonData.older.problem_data?.selected_symptoms && comparisonData.older.problem_data.selected_symptoms.length > 0 ? (
                     <ul>
@@ -903,6 +1347,11 @@ function App() {
                   <h4>Problem Classification</h4>
                   <p><strong>Domain modifier:</strong> {comparisonData.newer.problem_data?.domain || 'Unknown'}</p>
                   <p><strong>Type modifier:</strong> {comparisonData.newer.problem_data?.modifier_type || 'Unknown'}</p>
+                  
+                  <h4>Problem Rating Scale for Outcomes</h4>
+                  <p><strong>Status:</strong> {comparisonData.newer.score_data?.status || 'Not recorded'}</p>
+                  <p><strong>Knowledge:</strong> {comparisonData.newer.score_data?.knowledge || 'Not recorded'}</p>
+                  <p><strong>Behavior:</strong> {comparisonData.newer.score_data?.behavior || 'Not recorded'}</p>
                   
                   <h4>Signs & Symptoms</h4>
                   {comparisonData.newer.problem_data?.selected_symptoms && comparisonData.newer.problem_data.selected_symptoms.length > 0 ? (
@@ -1000,6 +1449,268 @@ function App() {
               )}
             </div>
           )}
+        </div>
+      );
+    }
+
+    if (showSelectPatient) {
+      return (
+        <div className="select-patient-container">
+          <button className="back-btn" onClick={handleBackFromSelectPatient}>
+            ← Back
+          </button>
+          <h2>Select Existing Patient</h2>
+          <div className="search-patient-form">
+            <div className="form-group">
+              <label>Enter Patient TIN</label>
+              <input
+                type="text"
+                value={searchTIN}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, '').slice(0, 11);
+                  setSearchTIN(value);
+                }}
+                placeholder="12345678901"
+                className="form-field"
+                pattern="[0-9]*"
+                inputMode="numeric"
+                maxLength="11"
+              />
+              <small className="form-hint">Enter exactly 11 digits</small>
+            </div>
+            
+            <button
+              className="search-patient-btn"
+              onClick={handleSearchPatient}
+              disabled={loading || !searchTIN || searchTIN.length !== 11}
+            >
+              {loading ? 'Searching...' : 'Search Patient'}
+            </button>
+            
+            {searchError && (
+              <div className="search-error">
+                <p>{searchError}</p>
+              </div>
+            )}
+            
+            {searchResults.length > 0 && (
+              <div className="search-results">
+                <h3>Search Results</h3>
+                {searchResults.map(patient => (
+                  <div key={patient.patient_id} className="patient-result-card">
+                    <div className="patient-info">
+                      <p><strong>Name:</strong> {patient.first_name} {patient.last_name}</p>
+                      <p><strong>TIN:</strong> {patient.tin}</p>
+                      <p><strong>Date of Birth:</strong> {patient.date_of_birth}</p>
+                      <p><strong>Phone:</strong> {patient.phone_number || 'Not provided'}</p>
+                      <p><strong>Address:</strong> {patient.address || 'Not provided'}</p>
+                    </div>
+                    <button
+                      className="select-patient-result-btn"
+                      onClick={() => handleSelectPatient(patient)}
+                    >
+                      Select This Patient
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    if (showPatientProblems) {
+      console.log('=== PATIENT PROBLEMS VIEW RENDERING ===');
+      console.log('showPatientProblems is true');
+      console.log('currentPatientId:', currentPatientId);
+      console.log('patientProblemsList:', patientProblemsList);
+      console.log('patientProblemsList length:', patientProblemsList.length);
+      return (
+        <div className="patient-problems-container">
+          <button className="back-btn" onClick={handleNewAssessment}>
+            ← Back to Patient Selection
+          </button>
+          <h2>Patient Problems</h2>
+          <p className="user-id-display">
+            Client: <strong>{clientInfo.firstName} {clientInfo.lastName}</strong>
+            {clientInfo.dateOfBirth && ` • DOB: ${clientInfo.dateOfBirth}`}
+          </p>
+          
+          <div className="problems-actions">
+            <button
+              className="add-problem-btn"
+              onClick={handleAddNewProblem}
+            >
+              Add New Problem →
+            </button>
+          </div>
+          
+          {loading ? (
+            <div className="loading-container">
+              <h3>Loading patient problems...</h3>
+            </div>
+          ) : (
+            <div className="patient-problems-list">
+              {patientProblemsList.length > 0 ? (
+                <div className="problems-grid">
+                  {patientProblemsList.map(problem => (
+                    <div key={problem.patient_problem_id} className="problem-tile" onClick={() => handleViewProblemDetails(problem)}>
+                      <h3>{problem.problem?.problem_name || 'Unknown Problem'}</h3>
+                      <p className="problem-date">
+                        Created: {new Date(problem.created_at).toLocaleDateString()}
+                      </p>
+                      <div className="problem-info">
+                        <p><strong>Domain:</strong> {problem.modifier_domain?.modifier_domain_name || 'Unknown'}</p>
+                        <p><strong>Type:</strong> {problem.modifier_type?.modifier_type_name || 'Unknown'}</p>
+                        <p><strong>Status:</strong>
+                          <span className={`problem-status ${problem.is_active ? 'active' : 'inactive'}`}>
+                            {problem.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </p>
+                        {problem.latest_score && (
+                          <div className="latest-score">
+                            <p><strong>Latest Assessment:</strong> {new Date(problem.latest_score.date_recorded).toLocaleDateString()}</p>
+                            <p><strong>Status:</strong> {problem.latest_score.status_rating?.rating_status_label || 'Not recorded'}</p>
+                            <p><strong>Knowledge:</strong> {problem.latest_score.knowledge_rating?.rating_knowledge_label || 'Not recorded'}</p>
+                            <p><strong>Behavior:</strong> {problem.latest_score.behavior_rating?.rating_behavior_label || 'Not recorded'}</p>
+                          </div>
+                        )}
+                      </div>
+                      <div className="problem-actions">
+                        <button
+                          className="view-details-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewProblemDetails(problem);
+                          }}
+                        >
+                          View Details
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="no-problems">
+                  <p>No problems found for this patient.</p>
+                  <button
+                    className="add-first-problem-btn"
+                    onClick={handleAddNewProblem}
+                  >
+                    Add First Problem →
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (showProblemDetails && selectedProblemForDetails) {
+      return (
+        <div className="problem-details-container">
+          <button className="back-btn" onClick={handleBackFromProblemDetails}>
+            ← Back to Problems
+          </button>
+          <h2>Problem Details</h2>
+          <p className="user-id-display">
+            Client: <strong>{clientInfo.firstName} {clientInfo.lastName}</strong>
+          </p>
+          
+          <div className="problem-details-content">
+            <div className="problem-header">
+              <h3>{selectedProblemForDetails.problem?.problem_name || 'Unknown Problem'}</h3>
+              <div className="problem-meta">
+                <p><strong>Domain:</strong> {selectedProblemForDetails.modifier_domain?.modifier_domain_name || 'Unknown'}</p>
+                <p><strong>Type:</strong> {selectedProblemForDetails.modifier_type?.modifier_type_name || 'Unknown'}</p>
+                <p><strong>Status:</strong>
+                  <span className={`problem-status ${selectedProblemForDetails.is_active ? 'active' : 'inactive'}`}>
+                    {selectedProblemForDetails.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                </p>
+                <p><strong>Created:</strong> {new Date(selectedProblemForDetails.created_at).toLocaleDateString()}</p>
+                {selectedProblemForDetails.latest_score && (
+                  <div className="latest-score-details">
+                    <h4>Latest Assessment</h4>
+                    <p><strong>Date:</strong> {new Date(selectedProblemForDetails.latest_score.date_recorded).toLocaleDateString()}</p>
+                    <p><strong>Status:</strong> {selectedProblemForDetails.latest_score.status_rating?.rating_status_label || 'Not recorded'}</p>
+                    <p><strong>Knowledge:</strong> {selectedProblemForDetails.latest_score.knowledge_rating?.rating_knowledge_label || 'Not recorded'}</p>
+                    <p><strong>Behavior:</strong> {selectedProblemForDetails.latest_score.behavior_rating?.rating_behavior_label || 'Not recorded'}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="problem-actions-section">
+              {selectedProblemForDetails.is_active && (
+                <div className="action-group">
+                  <h4>Update Problem</h4>
+                  <p>Add new status, knowledge, and behavior ratings for this problem:</p>
+                  <button
+                    className="add-assessment-btn"
+                    onClick={() => {
+                      // Set up for rating-only update flow
+                      const setupUpdateAssessment = async () => {
+                        try {
+                          // Use existing problem details instead of fetching fresh data
+                          const problemDetails = selectedProblemForDetails;
+                           
+                          if (problemDetails) {
+                            setSelectedProblemDetails(problemDetails);
+                            setCurrentDomain(problemDetails.problem?.domain_id);
+                            setCurrentProblem(problemDetails.problem_id);
+                            setCurrentSection('update-problem-rating'); // Go directly to rating section
+                            setShowProblemDetails(false);
+                          }
+                        } catch (error) {
+                          console.error('Error setting up update assessment:', error);
+                          alert('Error setting up update assessment: ' + (error.response?.data?.detail || error.message || 'Unknown error'));
+                        }
+                      };
+                       
+                      setupUpdateAssessment();
+                    }}
+                  >
+                    Update Problem
+                  </button>
+                </div>
+              )}
+              
+              <div className="action-group">
+                <h4>Problem Status</h4>
+                <p>Mark this problem as active or inactive:</p>
+                <div className="status-buttons">
+                  {selectedProblemForDetails.is_active ? (
+                    <button
+                      className="mark-inactive-btn"
+                      onClick={() => {
+                        if (window.confirm('Are you sure you want to mark this problem as inactive?')) {
+                          handleUpdateProblemStatus(selectedProblemForDetails, false);
+                        }
+                      }}
+                    >
+                      Mark as Inactive
+                    </button>
+                  ) : (
+                    <button
+                      className="mark-active-btn"
+                      onClick={() => handleUpdateProblemStatus(selectedProblemForDetails, true)}
+                    >
+                      Mark as Active
+                    </button>
+                  )}
+                </div>
+              </div>
+              
+              {!selectedProblemForDetails.is_active && (
+                <div className="inactive-notice">
+                  <p><strong>Note:</strong> This problem is inactive. You cannot add new assessments to inactive problems.</p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       );
     }
@@ -1122,9 +1833,17 @@ function App() {
               <p>* Required fields</p>
             </div>
             
-            <button className="user-id-submit" onClick={handleUserIdSubmit}>
-              Start Assessment →
-            </button>
+            <div className="button-row">
+              <button className="user-id-submit" onClick={handleStartAssessment}>
+                Start Assessment →
+              </button>
+              <button
+                className="select-patient-btn"
+                onClick={handleSelectExistingPatient}
+              >
+                Select Existing Patient →
+              </button>
+            </div>
             
             {/* Duplicate TIN Error Handling */}
             {duplicateTINError && (
@@ -1184,8 +1903,8 @@ function App() {
           
           <div className="categories-grid">
             {domains.map(domain => (
-              <div 
-                key={domain.domain_id} 
+              <div
+                key={domain.domain_id}
                 className="category-card"
                 onClick={() => setCurrentDomain(domain.domain_id)}
               >
@@ -1209,8 +1928,8 @@ function App() {
           
           <div className="subcategories-grid">
             {problems.map(problem => (
-              <div 
-                key={problem.problem_id} 
+              <div
+                key={problem.problem_id}
                 className="subcategory-card"
                 onClick={() => setCurrentProblem(problem.problem_id)}
               >
@@ -1320,9 +2039,29 @@ function App() {
             </div>
             
             <div className="navigation-buttons">
-              <button className="nav-btn next-btn" onClick={() => setCurrentSection('intervention')}>
-                Continue to Intervention Scheme →
+              <div className="left-buttons">
+                <button className="nav-btn back-btn" onClick={() => {
+                  setCurrentSection(null);
+                  setCurrentProblem(null);
+                  setShowPatientProblems(true);
+                  setShowProblemDetails(false);
+                }}>
+                  ← Back to Problems
+                </button>
+              </div>
+              <button className="nav-btn patient-problems-btn" onClick={() => {
+                setCurrentSection(null);
+                setCurrentProblem(null);
+                setShowPatientProblems(true);
+                setShowProblemDetails(false);
+              }}>
+                to Patient Problems
               </button>
+              <div className="right-buttons">
+                <button className="nav-btn next-btn" onClick={() => setCurrentSection('intervention')}>
+                  Continue to Intervention Scheme →
+                </button>
+              </div>
             </div>
           </div>
         );
@@ -1391,12 +2130,24 @@ function App() {
             </div>
             
             <div className="navigation-buttons">
-              <button className="nav-btn back-btn" onClick={() => setCurrentSection('classification')}>
-                ← Back to Classification
+              <div className="left-buttons">
+                <button className="nav-btn back-btn" onClick={() => setCurrentSection('classification')}>
+                  ← Back to Classification
+                </button>
+              </div>
+              <button className="nav-btn patient-problems-btn" onClick={() => {
+                setCurrentSection(null);
+                setCurrentProblem(null);
+                setShowPatientProblems(true);
+                setShowProblemDetails(false);
+              }}>
+                to Patient Problems
               </button>
-              <button className="nav-btn next-btn" onClick={() => setCurrentSection('rating')}>
-                Continue to Rating Scale →
-              </button>
+              <div className="right-buttons">
+                <button className="nav-btn next-btn" onClick={() => setCurrentSection('rating')}>
+                  Continue to Rating Scale →
+                </button>
+              </div>
             </div>
           </div>
         );
@@ -1431,12 +2182,22 @@ function App() {
             </div>
             
             <div className="navigation-buttons">
-              <button className="nav-btn back-btn" onClick={() => setCurrentSection('intervention')}>
-                ← Back to Intervention Scheme
+              <button className="nav-btn patient-problems-btn" onClick={() => {
+                setCurrentSection(null);
+                setCurrentProblem(null);
+                setShowPatientProblems(true);
+                setShowProblemDetails(false);
+              }}>
+                ← to Patient Problems
               </button>
-              <button className="nav-btn done-btn" onClick={() => setCurrentSection('intervention')}>
-                Done Selecting Targets
-              </button>
+              <div className="right-buttons">
+                <button className="nav-btn back-btn" onClick={() => setCurrentSection('intervention')}>
+                  ← Back to Intervention Scheme
+                </button>
+                <button className="nav-btn done-btn" onClick={() => setCurrentSection('intervention')}>
+                  Done Selecting Targets
+                </button>
+              </div>
             </div>
           </div>
         );
@@ -1533,12 +2294,526 @@ function App() {
             </div>
             
             <div className="navigation-buttons">
-              <button className="nav-btn back-btn" onClick={() => setCurrentSection('intervention')}>
-                ← Back to Intervention
+              <div className="left-buttons">
+                <button className="nav-btn back-btn" onClick={() => setCurrentSection('intervention')}>
+                  ← Back to Intervention
+                </button>
+              </div>
+              <button className="nav-btn patient-problems-btn" onClick={() => {
+                setCurrentSection(null);
+                setCurrentProblem(null);
+                setShowPatientProblems(true);
+                setShowProblemDetails(false);
+              }}>
+                to Patient Problems
               </button>
-              <button className="nav-btn next-btn" onClick={handleSubmit}>
-                Complete Assessment
+              <div className="right-buttons">
+                <button className="nav-btn next-btn" onClick={handleSubmit}>
+                  Complete Assessment
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+      
+      // ============ SECTION 4: UPDATE PROBLEM ASSESSMENT ============
+      else if (currentSection === 'update-problem') {
+        // Get problem data for selected problem
+        const updateProblemData = responses[currentDomain]?.[currentProblem] || {};
+        
+        return (
+          <div className="questions-container">
+            <button className="back-btn" onClick={() => {
+              setCurrentSection(null);
+              setCurrentProblem(null);
+              setShowUserIdInput(false); // Make sure we don't go back to patient selection
+              setShowPatientProblems(true); // Go back to patient problems page
+            }}>
+              ← Back to Problems
+            </button>
+            
+            <h2>Assessment for {selectedProblemDetails?.problem_name}</h2>
+            <p className="problem-context">
+              <strong>Domain:</strong> {domain?.domain_name}
+            </p>
+            
+            <div className="section-header">
+              <h3>1. PROBLEM CLASSIFICATION SCHEME</h3>
+              <div className="progress-indicator">
+                <span className="progress-step active"></span>
+                <span className="progress-line"></span>
+                <span className="progress-step"></span>
+                <span className="progress-line"></span>
+                <span className="progress-step"></span>
+              </div>
+            </div>
+            
+            <div className="questions-form">
+              {/* 1.1 Domain Modifiers (Radio) - Pre-filled from existing problem */}
+              <div className="question-group">
+                <h4>1.1 Domain Modifiers</h4>
+                <p className="question-help">Who is affected by this problem? (Select one)</p>
+                <div className="radio-options">
+                  {modifierDomains.map(modDomain => (
+                    <label key={modDomain.modifier_domain_id} className="radio-label">
+                      <input
+                        type="radio"
+                        name="domain-modifier"
+                        value={modDomain.modifier_domain_id}
+                        checked={updateProblemData.modifierDomain === modDomain.modifier_domain_id ||
+                                selectedProblemForDetails?.modifier_domain_id === modDomain.modifier_domain_id}
+                        onChange={(e) => handleRadioChange('modifierDomain', parseInt(e.target.value))}
+                      />
+                      <span className="radio-text">{modDomain.modifier_domain_name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              
+              {/* 1.2 Type Modifiers (Radio) - Pre-filled from existing problem */}
+              <div className="question-group">
+                <h4>1.2 Type Modifiers</h4>
+                <p className="question-help">What is the nature of this problem? (Select one)</p>
+                <div className="radio-options">
+                  {modifierTypes.map(modType => (
+                    <label key={modType.modifier_type_id} className="radio-label">
+                      <input
+                        type="radio"
+                        name="type-modifier"
+                        value={modType.modifier_type_id}
+                        checked={updateProblemData.modifierType === modType.modifier_type_id ||
+                                selectedProblemForDetails?.modifier_type_id === modType.modifier_type_id}
+                        onChange={(e) => handleRadioChange('modifierType', parseInt(e.target.value))}
+                      />
+                      <span className="radio-text">{modType.modifier_type_name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              
+              {/* 1.3 Signs and Symptoms (Checkboxes) - Pre-filled from existing problem */}
+              <div className="question-group">
+                <h4>1.3 Signs and Symptoms</h4>
+                <p className="question-help">Select all applicable symptoms for this problem</p>
+                <div className="checkbox-options">
+                  {symptoms.length > 0 ? (
+                    symptoms.map(symptom => (
+                      <label key={symptom.symptom_id} className="checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={(updateProblemData.selectedSymptoms || []).includes(symptom.symptom_id) ||
+                                  (selectedProblemForDetails?.symptoms || []).some(s => s.symptom_id === symptom.symptom_id)}
+                          onChange={(e) => handleCheckboxChange('selectedSymptoms', symptom.symptom_id, e.target.checked)}
+                        />
+                        <span className="checkbox-text">{symptom.symptom_description}</span>
+                      </label>
+                    ))
+                  ) : (
+                    <p className="no-data">
+                      No symptoms data available.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            <div className="navigation-buttons">
+              <button className="nav-btn patient-problems-btn" onClick={() => {
+                setCurrentSection(null);
+                setCurrentProblem(null);
+                setShowPatientProblems(true);
+                setShowProblemDetails(false);
+              }}>
+                to Patient Problems
               </button>
+              <div className="right-buttons">
+                <button className="nav-btn next-btn" onClick={() => setCurrentSection('update-problem-intervention')}>
+                  Continue to Intervention Scheme →
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+      
+      // ============ SECTION 4b: UPDATE PROBLEM INTERVENTION ============
+      else if (currentSection === 'update-problem-intervention') {
+        const updateProblemData = responses[currentDomain]?.[currentProblem] || {};
+        
+        return (
+          <div className="questions-container">
+            <button className="back-btn" onClick={() => {
+              setCurrentSection(null);
+              setCurrentProblem(null);
+              setShowUserIdInput(false); // Make sure we don't go back to patient selection
+              setShowPatientProblems(true); // Go back to patient problems page
+            }}>
+              ← Back to Problems
+            </button>
+            
+            <h2>Assessment for {selectedProblemDetails?.problem_name}</h2>
+            
+            <div className="section-header">
+              <h3>2. INTERVENTION SCHEME</h3>
+              <div className="progress-indicator">
+                <span className="progress-step completed"></span>
+                <span className="progress-line"></span>
+                <span className="progress-step active"></span>
+                <span className="progress-line"></span>
+                <span className="progress-step"></span>
+              </div>
+            </div>
+            
+            <div className="questions-form">
+              {/* 2.1 Intervention Categories (Checkboxes) - Pre-filled from existing problem */}
+              <div className="question-group">
+                <h4>2.1 Intervention Categories</h4>
+                <p className="question-help">Select applicable intervention categories</p>
+                <div className="checkbox-options">
+                  {interventionCategories.map(category => (
+                    <label key={category.category_id} className="checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={(updateProblemData.interventionCategories || []).includes(category.category_id) ||
+                                (selectedProblemForDetails?.interventions || []).some(i => i.category_id === category.category_id)}
+                        onChange={(e) => handleCheckboxChange('interventionCategories', category.category_id, e.target.checked)}
+                      />
+                      <span className="checkbox-text">{category.category_name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              
+              {/* 2.2 Intervention Targets */}
+              <div className="question-group">
+                <h4>2.2 Intervention Targets</h4>
+                <p className="question-help">Select intervention targets</p>
+                <div className="targets-preview">
+                  <p>There are {interventionTargets.length} intervention targets available.</p>
+                  <button
+                    className="nav-btn targets-btn"
+                    onClick={() => setCurrentSection('update-problem-targets')}
+                  >
+                    Select Intervention Targets →
+                  </button>
+                  
+                  {(updateProblemData.interventionTargets || []).length > 0 && (
+                    <div className="selected-summary">
+                      <p><strong>Selected:</strong> {updateProblemData.interventionTargets.length} target(s)</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            <div className="navigation-buttons">
+              <button className="nav-btn patient-problems-btn" onClick={() => {
+                setCurrentSection(null);
+                setCurrentProblem(null);
+                setShowPatientProblems(true);
+                setShowProblemDetails(false);
+              }}>
+                to Patient Problems
+              </button>
+              <div className="right-buttons">
+                <button className="nav-btn back-btn" onClick={() => setCurrentSection('update-problem')}>
+                  ← Back to Classification
+                </button>
+                <button className="nav-btn next-btn" onClick={() => setCurrentSection('update-problem-rating')}>
+                  Continue to Rating Scale →
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+      
+      // ============ SECTION 4c: UPDATE PROBLEM TARGETS ============
+      else if (currentSection === 'update-problem-targets') {
+        const updateProblemData = responses[currentDomain]?.[currentProblem] || {};
+        const selectedTargets = updateProblemData.interventionTargets || [];
+        
+        return (
+          <div className="targets-container">
+            <button className="back-btn" onClick={() => {
+              setCurrentSection(null);
+              setCurrentProblem(null);
+              setShowUserIdInput(false); // Make sure we don't go back to patient selection
+              setShowPatientProblems(true); // Go back to patient problems page
+            }}>
+              ← Back to Problems
+            </button>
+            
+            <h2>Intervention Targets for {selectedProblemDetails?.problem_name}</h2>
+            <p className="selection-info">
+              Selected: {selectedTargets.length} of {interventionTargets.length} targets
+            </p>
+            
+            <div className="targets-grid">
+              {interventionTargets.map(target => (
+                <label key={target.target_id} className="target-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={selectedTargets.includes(target.target_id) ||
+                            (selectedProblemForDetails?.interventions || []).some(i => i.target_id === target.target_id)}
+                    onChange={(e) => handleCheckboxChange('interventionTargets', target.target_id, e.target.checked)}
+                  />
+                  <span className="target-checkbox-text">{target.target_name}</span>
+                </label>
+              ))}
+            </div>
+            
+            <div className="navigation-buttons">
+              <button className="nav-btn patient-problems-btn" onClick={() => {
+                setCurrentSection(null);
+                setCurrentProblem(null);
+                setShowPatientProblems(true);
+                setShowProblemDetails(false);
+              }}>
+                to Patient Problems
+              </button>
+              <div className="right-buttons">
+                <button className="nav-btn back-btn" onClick={() => setCurrentSection('update-problem-intervention')}>
+                  ← Back to Intervention Scheme
+                </button>
+                <button className="nav-btn done-btn" onClick={() => setCurrentSection('update-problem-intervention')}>
+                  Done Selecting Targets
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+      
+      // ============ SECTION 4d: UPDATE PROBLEM RATING ============
+      else if (currentSection === 'update-problem-rating') {
+        const updateProblemData = responses[currentDomain]?.[currentProblem] || {};
+        
+        return (
+          <div className="questions-container">
+            <button className="back-btn" onClick={() => {
+              setCurrentSection(null);
+              setCurrentProblem(null);
+              setShowPatientProblems(true); // Go back to patient problems page
+            }}>
+              ← Back to Problems
+            </button>
+            
+            <h2>Assessment for {selectedProblemDetails?.problem_name}</h2>
+            <p className="problem-context">
+              <strong>Domain:</strong> {domain?.domain_name}
+            </p>
+            
+            <div className="section-header">
+              <h3>3. PROBLEM RATING SCALE FOR OUTCOMES</h3>
+              <div className="progress-indicator">
+                <span className="progress-step completed"></span>
+                <span className="progress-line"></span>
+                <span className="progress-step completed"></span>
+                <span className="progress-line"></span>
+                <span className="progress-step active"></span>
+              </div>
+            </div>
+            
+            <div className="questions-form">
+              {/* 3.1 Status Rating (Radio) */}
+              <div className="question-group">
+                <h4>3.1 Status</h4>
+                <p className="question-help">Severity of signs and symptoms (1-5 scale)</p>
+                <div className="radio-options">
+                  {outcomeRatings?.status?.map(rating => (
+                    <label key={rating.rating_status_id} className="radio-label">
+                      <input
+                        type="radio"
+                        name="status-rating"
+                        value={rating.rating_status_label}
+                        checked={updateProblemData.ratingStatus === rating.rating_status_label}
+                        onChange={(e) => handleRadioChange('ratingStatus', e.target.value)}
+                      />
+                      <span className="radio-text">{rating.rating_status_label}</span>
+                    </label>
+                  )) || (
+                    // Fallback if data not loaded yet
+                    <p>Loading status ratings...</p>
+                  )}
+                </div>
+              </div>
+              
+              {/* 3.2 Knowledge Rating (Radio) */}
+              <div className="question-group">
+                <h4>3.2 Knowledge</h4>
+                <p className="question-help">Client's understanding of problem (1-5 scale)</p>
+                <div className="radio-options">
+                  {outcomeRatings?.knowledge?.map(rating => (
+                    <label key={rating.rating_knowledge_id} className="radio-label">
+                      <input
+                        type="radio"
+                        name="knowledge-rating"
+                        value={rating.rating_knowledge_label}
+                        checked={updateProblemData.ratingKnowledge === rating.rating_knowledge_label}
+                        onChange={(e) => handleRadioChange('ratingKnowledge', e.target.value)}
+                      />
+                      <span className="radio-text">{rating.rating_knowledge_label}</span>
+                    </label>
+                  )) || (
+                    <p>Loading knowledge ratings...</p>
+                  )}
+                </div>
+              </div>
+              
+              {/* 3.3 Behavior Rating (Radio) */}
+              <div className="question-group">
+                <h4>3.3 Behavior</h4>
+                <p className="question-help">Appropriateness of client's behavior (1-5 scale)</p>
+                <div className="radio-options">
+                  {outcomeRatings?.behavior?.map(rating => (
+                    <label key={rating.rating_behavior_id} className="radio-label">
+                      <input
+                        type="radio"
+                        name="behavior-rating"
+                        value={rating.rating_behavior_label}
+                        checked={updateProblemData.ratingBehavior === rating.rating_behavior_label}
+                        onChange={(e) => handleRadioChange('ratingBehavior', e.target.value)}
+                      />
+                      <span className="radio-text">{rating.rating_behavior_label}</span>
+                    </label>
+                  )) || (
+                    <p>Loading behavior ratings...</p>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            <div className="navigation-buttons">
+              <button className="nav-btn patient-problems-btn" onClick={() => {
+                setCurrentSection(null);
+                setCurrentProblem(null);
+                setShowPatientProblems(true);
+                setShowProblemDetails(false);
+              }}>
+                to Patient Problems
+              </button>
+              <div className="right-buttons">
+                <button className="nav-btn back-btn" onClick={() => setCurrentSection('update-problem-intervention')}>
+                  ← Back to Intervention
+                </button>
+                <button className="nav-btn next-btn" onClick={handleSubmitUpdateProblem}>
+                  Update Problem
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+      
+      // ============ SECTION 5: RATING-ONLY FOR EXISTING PROBLEMS ============
+      else if (currentSection === 'rating-only') {
+        return (
+          <div className="questions-container">
+            <button className="back-btn" onClick={() => {
+              setCurrentSection(null);
+              setCurrentProblem(null);
+              setShowProblemDetails(true);
+            }}>
+              ← Back to Problem Details
+            </button>
+            
+            <h2>Assessment for {selectedProblemDetails?.problem_name}</h2>
+            <p className="problem-context">
+              <strong>Domain:</strong> {domain?.domain_name}
+            </p>
+            
+            <div className="section-header">
+              <h3>PROBLEM RATING SCALE FOR OUTCOMES</h3>
+              <div className="progress-indicator">
+                <span className="progress-step active"></span>
+              </div>
+            </div>
+            
+            <div className="questions-form">
+              {/* Status Rating (Radio) */}
+              <div className="question-group">
+                <h4>Status</h4>
+                <p className="question-help">Severity of signs and symptoms (1-5 scale)</p>
+                <div className="radio-options">
+                  {outcomeRatings?.status?.map(rating => (
+                    <label key={rating.rating_status_id} className="radio-label">
+                      <input
+                        type="radio"
+                        name="status-rating"
+                        value={rating.rating_status_label}
+                        checked={problemData.ratingStatus === rating.rating_status_label}
+                        onChange={(e) => handleRadioChange('ratingStatus', e.target.value)}
+                      />
+                      <span className="radio-text">{rating.rating_status_label}</span>
+                    </label>
+                  )) || (
+                    // Fallback if data not loaded yet
+                    <p>Loading status ratings...</p>
+                  )}
+                </div>
+              </div>
+              
+              {/* Knowledge Rating (Radio) */}
+              <div className="question-group">
+                <h4>Knowledge</h4>
+                <p className="question-help">Client's understanding of the problem (1-5 scale)</p>
+                <div className="radio-options">
+                  {outcomeRatings?.knowledge?.map(rating => (
+                    <label key={rating.rating_knowledge_id} className="radio-label">
+                      <input
+                        type="radio"
+                        name="knowledge-rating"
+                        value={rating.rating_knowledge_label}
+                        checked={problemData.ratingKnowledge === rating.rating_knowledge_label}
+                        onChange={(e) => handleRadioChange('ratingKnowledge', e.target.value)}
+                      />
+                      <span className="radio-text">{rating.rating_knowledge_label}</span>
+                    </label>
+                  )) || (
+                    <p>Loading knowledge ratings...</p>
+                  )}
+                </div>
+              </div>
+              
+              {/* Behavior Rating (Radio) */}
+              <div className="question-group">
+                <h4>Behavior</h4>
+                <p className="question-help">Appropriateness of client's behavior (1-5 scale)</p>
+                <div className="radio-options">
+                  {outcomeRatings?.behavior?.map(rating => (
+                    <label key={rating.rating_behavior_id} className="radio-label">
+                      <input
+                        type="radio"
+                        name="behavior-rating"
+                        value={rating.rating_behavior_label}
+                        checked={problemData.ratingBehavior === rating.rating_behavior_label}
+                        onChange={(e) => handleRadioChange('ratingBehavior', e.target.value)}
+                      />
+                      <span className="radio-text">{rating.rating_behavior_label}</span>
+                    </label>
+                  )) || (
+                    <p>Loading behavior ratings...</p>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            <div className="navigation-buttons">
+              <button className="nav-btn patient-problems-btn" onClick={() => {
+                setCurrentSection(null);
+                setCurrentProblem(null);
+                setShowPatientProblems(true);
+                setShowProblemDetails(false);
+              }}>
+                to Patient Problems
+              </button>
+              <div className="right-buttons">
+                <button className="nav-btn next-btn" onClick={handleSubmitRatingOnly}>
+                  Save Assessment
+                </button>
+              </div>
             </div>
           </div>
         );
@@ -1568,7 +2843,7 @@ function App() {
         {!showUserIdInput && !currentProblem && !showComparisonView && (
           <div className="action-buttons">
             <button className="export-btn" onClick={exportToJson}>
-              Export Patient Data (JSON)
+              Export Patient Data to File
             </button>
             <div className="button-gap"></div>
             <button className="comparison-btn" onClick={handleFetchProblemsForComparison}>
@@ -1580,16 +2855,89 @@ function App() {
             </button>
             <div className="button-gap"></div>
             <button className="reset-btn" onClick={handleReset}>
-              Reset All
+              Reset All Checkboxes
             </button>
           </div>
         )}
         
         {showComparisonView && (
           <div className="action-buttons">
+            <button className="export-btn" onClick={exportToJson}>
+              Export Patient Data to File
+            </button>
+            <div className="button-gap"></div>
             <button className="new-data-btn" onClick={handleNewAssessment}>
               New Assessment
             </button>
+          </div>
+        )}
+        
+        {/* Export Modal */}
+        {showExportModal && (
+          <div className="modal-overlay">
+            <div className="modal-content">
+              <h3>Export Patient Data</h3>
+              <div className="export-sections">
+                <div className="export-section">
+                  <h4>Select export format:</h4>
+                  <div className="export-options">
+                    <label className="export-option">
+                      <input
+                            type="radio"
+                            name="exportFormat"
+                            value="txt"
+                            checked={exportFormat === 'txt'}
+                            onChange={(e) => setExportFormat(e.target.value)}
+                          />
+                      <span>.txt (Text File)</span>
+                    </label>
+                    <label className="export-option">
+                      <input
+                            type="radio"
+                            name="exportFormat"
+                            value="json"
+                            checked={exportFormat === 'json'}
+                            onChange={(e) => setExportFormat(e.target.value)}
+                          />
+                      <span>.json (JSON File)</span>
+                    </label>
+                  </div>
+                </div>
+                <div className="export-section">
+                  <h4>Select destination:</h4>
+                  <div className="export-options">
+                    <label className="export-option">
+                      <input
+                            type="radio"
+                            name="exportDestination"
+                            value="download"
+                            checked={true}
+                            onChange={(e) => {}}
+                          />
+                      <span>Download to device</span>
+                    </label>
+                    <label className="export-option">
+                      <input
+                            type="radio"
+                            name="exportDestination"
+                            value="group-office"
+                            checked={false}
+                            onChange={(e) => {}}
+                          />
+                      <span>Group office</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button className="cancel-btn" onClick={handleExportCancel}>
+                  Cancel
+                </button>
+                <button className="confirm-btn" onClick={handleExportConfirm}>
+                  Export
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </main>
