@@ -2950,6 +2950,13 @@ function App() {
           </div>
         )}
       </main>
+      <footer className="App-footer">
+        <p>
+          <a href="https://github.com/leo-oli/social-care-omaha" target="_blank" rel="noopener noreferrer">
+            Source Code on GitHub
+          </a>
+        </p>
+      </footer>
     </div>
   );
 }
