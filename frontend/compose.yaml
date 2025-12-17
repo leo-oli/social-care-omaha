@@ -1,27 +1,25 @@
-version: '3.8'
-
 services:
   # Development with hot reload
-  frontend-dev:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    container_name: omaha-frontend-dev
-    ports:
-      - "3000:3000"
-    volumes:
-      - .:/app
-      - /app/node_modules
-    environment:
-      - CHOKIDAR_USEPOLLING=true
-      - REACT_APP_API_URL=http://localhost:8000  # Backend URL
-    command: npm start
+  # frontend-dev:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.dev
+  #   container_name: omaha-frontend-dev
+  #   ports:
+  #     - "3000:3000"
+  #   volumes:
+  #     - .:/app
+  #     - /app/node_modules
+  #   environment:
+  #     - CHOKIDAR_USEPOLLING=true
+  #     - REACT_APP_API_URL=${REACT_APP_API_URL:-http://localhost:8000}
+  #   command: npm start
 
   # Production build test
   frontend-prod:
     build: .
     container_name: omaha-frontend-prod
     ports:
-      - "8080:80"
+      - "3000:80"
     environment:
-      - REACT_APP_API_URL=/api  # When served with backend
+      - REACT_APP_API_URL=${REACT_APP_API_URL:-http://localhost:8000}

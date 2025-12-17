@@ -32,7 +32,6 @@ cd frontend
 node_modules/
 build/
 dist/
-.env*
 *.log
 "@ | Out-File -FilePath .gitignore -Encoding UTF8
 
