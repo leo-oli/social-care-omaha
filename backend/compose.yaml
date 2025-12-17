@@ -3,8 +3,14 @@ services:
         build:
             context: .
             target: dev  # prod
+        env_file:
+            - .env
         environment:
             ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+            GO_URL: ${GO_URL}
+            GO_USERNAME: ${GO_USERNAME}
+            GO_PASSWORD: ${GO_PASSWORD}
+            GO_NOTEBOOK_ID: ${GO_NOTEBOOK_ID}
         ports:
             - 8000:8000
         volumes:
