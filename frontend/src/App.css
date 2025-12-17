@@ -386,7 +386,7 @@
   font-size: 0.95rem;
 }
 
-/* ============ CLIENT INFO FORM ============ */
+/* ============ PATIENT INFO FORM ============ */
 .user-id-container {
   background: #ffffff;
   border-radius: 12px;
@@ -402,7 +402,7 @@
   margin-bottom: 1.5rem;
 }
 
-.client-info-form {
+.patient-info-form {
   max-width: 600px;
   margin: 0 auto;
 }

@@ -3,8 +3,8 @@ import './App.css';
 import { api } from './api.js';
 
 function App() {
-  // Client information state
-  const [clientInfo, setClientInfo] = useState({
+  // Patient information state
+  const [patientInfo, setPatientInfo] = useState({
     firstName: '',
     lastName: '',
     dateOfBirth: '',
@@ -112,13 +112,13 @@ function App() {
         console.log('Consent definitions loaded:', data.length);
         setConsentDefinitions(data);
 
-        // Initialize consents in clientInfo with default false values
+        // Initialize consents in patientInfo with default false values
         const initialConsents = {};
         data.forEach(consent => {
           initialConsents[consent.consent_definition_id] = false;
         });
 
-        setClientInfo(prev => ({
+        setPatientInfo(prev => ({
           ...prev,
           consents: initialConsents
         }));
@@ -230,7 +230,7 @@ function App() {
   }, [currentProblem, problems]);
 
   // ============ HANDLER FUNCTIONS ============
-  const handleClientInfoChange = (field, value) => {
+  const handlePatientInfoChange = (field, value) => {
     let processedValue = value;
 
     // Apply field-specific validation and formatting
@@ -245,14 +245,14 @@ function App() {
       processedValue = value.replace(/\D/g, '').slice(0, 11);
     }
 
-    setClientInfo(prev => ({
+    setPatientInfo(prev => ({
       ...prev,
       [field]: processedValue
     }));
   };
 
   const handleConsentChange = (consentId, hasConsented) => {
-    setClientInfo(prev => ({
+    setPatientInfo(prev => ({
       ...prev,
       consents: {
         ...prev.consents,
@@ -262,23 +262,23 @@ function App() {
   };
 
   // Validation functions
-  const validateClientInfo = () => {
+  const validatePatientInfo = () => {
     const errors = [];
 
     // Name validation (letters only)
-    if (!clientInfo.firstName.trim() || !/^[a-zA-Z\s]+$/.test(clientInfo.firstName.trim())) {
+    if (!patientInfo.firstName.trim() || !/^[a-zA-Z\s]+$/.test(patientInfo.firstName.trim())) {
       errors.push('First name must contain only letters');
     }
 
-    if (!clientInfo.lastName.trim() || !/^[a-zA-Z\s]+$/.test(clientInfo.lastName.trim())) {
+    if (!patientInfo.lastName.trim() || !/^[a-zA-Z\s]+$/.test(patientInfo.lastName.trim())) {
       errors.push('Last name must contain only letters');
     }
 
     // Birthdate validation - now mandatory
-    if (!clientInfo.dateOfBirth) {
+    if (!patientInfo.dateOfBirth) {
       errors.push('Date of birth is required');
     } else {
-      const birthDate = new Date(clientInfo.dateOfBirth);
+      const birthDate = new Date(patientInfo.dateOfBirth);
       const today = new Date();
       const maxAgeDate = new Date();
       maxAgeDate.setFullYear(today.getFullYear() - 150);
@@ -291,14 +291,14 @@ function App() {
     }
 
     // Phone number validation (up to 17 digits)
-    if (clientInfo.phoneNumber && clientInfo.phoneNumber.length > 17) {
+    if (patientInfo.phoneNumber && patientInfo.phoneNumber.length > 17) {
       errors.push('Phone number cannot exceed 17 digits');
     }
 
     // TIN validation (now mandatory and exactly 11 digits)
-    if (!clientInfo.tin) {
+    if (!patientInfo.tin) {
       errors.push('TIN is required');
-    } else if (clientInfo.tin.length !== 11) {
+    } else if (patientInfo.tin.length !== 11) {
       errors.push('TIN must be exactly 11 digits');
     }
 
@@ -306,7 +306,7 @@ function App() {
     if (consentDefinitions.length > 0) {
       const mandatoryConsents = consentDefinitions.filter(c => c.is_mandatory);
       for (const consent of mandatoryConsents) {
-        if (!clientInfo.consents[consent.consent_definition_id]) {
+        if (!patientInfo.consents[consent.consent_definition_id]) {
           errors.push(`You must consent to: ${consent.consent_title}`);
         }
       }
@@ -366,7 +366,7 @@ function App() {
     setExistingPatient(null);
 
     // Validate all fields
-    const errors = validateClientInfo();
+    const errors = validatePatientInfo();
 
     if (errors.length > 0) {
       alert('Please fix the following errors:\n' + errors.join('\n'));
@@ -377,25 +377,25 @@ function App() {
 
     try {
       // First check if a patient with this TIN already exists
-      const existing = await checkExistingPatient(clientInfo.tin);
+      const existing = await checkExistingPatient(patientInfo.tin);
 
       if (existing) {
         // Patient with this TIN already exists
         setExistingPatient(existing);
-        setDuplicateTINError(`A patient with TIN ${clientInfo.tin} already exists.`);
+        setDuplicateTINError(`A patient with TIN ${patientInfo.tin} already exists.`);
         setLoading(false);
         return;
       }
 
       // Prepare patient data for API
       const patientData = {
-        first_name: clientInfo.firstName,
-        last_name: clientInfo.lastName,
-        date_of_birth: clientInfo.dateOfBirth,
-        phone_number: clientInfo.phoneNumber || null,
-        address: clientInfo.address || null,
-        tin: clientInfo.tin,
-        consents: Object.entries(clientInfo.consents).map(([consentId, hasConsented]) => ({
+        first_name: patientInfo.firstName,
+        last_name: patientInfo.lastName,
+        date_of_birth: patientInfo.dateOfBirth,
+        phone_number: patientInfo.phoneNumber || null,
+        address: patientInfo.address || null,
+        tin: patientInfo.tin,
+        consents: Object.entries(patientInfo.consents).map(([consentId, hasConsented]) => ({
           consent_definition_id: parseInt(consentId),
           has_consented: hasConsented
         }))
@@ -420,9 +420,9 @@ function App() {
 
       // Check if this is a TIN uniqueness constraint error
       if (error.response?.data?.detail && error.response.data.detail.includes('UNIQUE constraint failed')) {
-        setDuplicateTINError(`A patient with TIN ${clientInfo.tin} already exists.`);
+        setDuplicateTINError(`A patient with TIN ${patientInfo.tin} already exists.`);
         // Try to get the existing patient details
-        const existing = await checkExistingPatient(clientInfo.tin);
+        const existing = await checkExistingPatient(patientInfo.tin);
         if (existing) {
           setExistingPatient(existing);
         }
@@ -451,15 +451,15 @@ function App() {
     if (existingPatient) {
       setCurrentPatientId(existingPatient.patient_id);
 
-      // Update client info with existing patient data
-      setClientInfo({
+      // Update patient info with existing patient data
+      setPatientInfo({
         firstName: existingPatient.first_name,
         lastName: existingPatient.last_name,
         dateOfBirth: existingPatient.date_of_birth,
         phoneNumber: existingPatient.phone_number || '',
         address: existingPatient.address || '',
         tin: existingPatient.tin,
-        consents: clientInfo.consents // Keep current consents
+        consents: patientInfo.consents // Keep current consents
       });
 
       // Reset error states
@@ -476,7 +476,7 @@ function App() {
   const handleEnterDifferentTIN = () => {
     setDuplicateTINError(null);
     setExistingPatient(null);
-    setClientInfo(prev => ({
+    setPatientInfo(prev => ({
       ...prev,
       tin: ''
     }));
@@ -517,15 +517,15 @@ function App() {
     console.log('handleSelectPatient called with patient:', patient);
     setCurrentPatientId(patient.patient_id);
 
-    // Update client info with selected patient data
-    setClientInfo({
+    // Update patient info with selected patient data
+    setPatientInfo({
       firstName: patient.first_name,
       lastName: patient.last_name,
       dateOfBirth: patient.date_of_birth,
       phoneNumber: patient.phone_number || '',
       address: patient.address || '',
       tin: patient.tin,
-      consents: clientInfo.consents // Keep current consents
+      consents: patientInfo.consents // Keep current consents
     });
 
     // Reset search states
@@ -729,7 +729,7 @@ function App() {
 
   const handleNewAssessment = () => {
     // Clear ALL state
-    setClientInfo({
+    setPatientInfo({
       firstName: '',
       lastName: '',
       dateOfBirth: '',
@@ -986,8 +986,8 @@ function App() {
 
   const exportToJson = async () => {
     // Check if we have at least a name for the file
-    if (!clientInfo.firstName.trim() && !clientInfo.lastName.trim()) {
-      alert('Please enter client information before exporting');
+    if (!patientInfo.firstName.trim() && !patientInfo.lastName.trim()) {
+      alert('Please enter patient information before exporting');
       return;
     }
 
@@ -1022,12 +1022,12 @@ function App() {
       if (exportFormat === 'json') {
         const jsonData = typeof response.data === 'string' ? response.data : JSON.stringify(response.data, null, 2);
         blob = new Blob([jsonData], { type: 'application/json' });
-        fileName = `patient_data_${clientInfo.firstName}_${clientInfo.lastName}_${Date.now()}.json`;
+        fileName = `patient_data_${patientInfo.firstName}_${patientInfo.lastName}_${Date.now()}.json`;
         mimeType = 'application/json';
       } else if (exportFormat === 'txt') {
         const textData = typeof response.data === 'string' ? response.data : JSON.stringify(response.data, null, 2);
         blob = new Blob([textData], { type: 'text/plain' });
-        fileName = `patient_data_${clientInfo.firstName}_${clientInfo.lastName}_${Date.now()}.txt`;
+        fileName = `patient_data_${patientInfo.firstName}_${patientInfo.lastName}_${Date.now()}.txt`;
         mimeType = 'text/plain';
       }
 
@@ -1285,7 +1285,7 @@ function App() {
           </button>
           <h2>Problem Assessment Comparison</h2>
           <p className="user-id-display">
-            Client: <strong>{clientInfo.firstName} {clientInfo.lastName}</strong>
+            Patient: <strong>{patientInfo.firstName} {patientInfo.lastName}</strong>
           </p>
 
           <div className="comparison-columns">
@@ -1408,7 +1408,7 @@ function App() {
           </button>
           <h2>Select Problems to Compare</h2>
           <p className="user-id-display">
-            Client: <strong>{clientInfo.firstName} {clientInfo.lastName}</strong>
+            Patient: <strong>{patientInfo.firstName} {patientInfo.lastName}</strong>
           </p>
           <p className="selection-info">
             Selected: {selectedProblems.length} of 2 problems
@@ -1542,8 +1542,8 @@ function App() {
           </button>
           <h2>Patient Problems</h2>
           <p className="user-id-display">
-            Client: <strong>{clientInfo.firstName} {clientInfo.lastName}</strong>
-            {clientInfo.dateOfBirth && ` • DOB: ${clientInfo.dateOfBirth}`}
+            Patient: <strong>{patientInfo.firstName} {patientInfo.lastName}</strong>
+            {patientInfo.dateOfBirth && ` • DOB: ${patientInfo.dateOfBirth}`}
           </p>
 
           <div className="problems-actions">
@@ -1625,7 +1625,7 @@ function App() {
           </button>
           <h2>Problem Details</h2>
           <p className="user-id-display">
-            Client: <strong>{clientInfo.firstName} {clientInfo.lastName}</strong>
+            Patient: <strong>{patientInfo.firstName} {patientInfo.lastName}</strong>
           </p>
 
           <div className="problem-details-content">
@@ -1727,15 +1727,15 @@ function App() {
     if (showUserIdInput) {
       return (
         <div className="user-id-container">
-          <h2>Enter Client Information</h2>
-          <div className="client-info-form">
+          <h2>Enter Patient Information</h2>
+          <div className="patient-info-form">
             <div className="form-row">
               <div className="form-group">
                 <label>First Name *</label>
                 <input
                   type="text"
-                  value={clientInfo.firstName}
-                  onChange={(e) => handleClientInfoChange('firstName', e.target.value)}
+                  value={patientInfo.firstName}
+                  onChange={(e) => handlePatientInfoChange('firstName', e.target.value)}
                   placeholder="Petras"
                   className="form-field"
                   required
@@ -1745,8 +1745,8 @@ function App() {
                 <label>Last Name *</label>
                 <input
                   type="text"
-                  value={clientInfo.lastName}
-                  onChange={(e) => handleClientInfoChange('lastName', e.target.value)}
+                  value={patientInfo.lastName}
+                  onChange={(e) => handlePatientInfoChange('lastName', e.target.value)}
                   placeholder="Petravičius"
                   className="form-field"
                   required
@@ -1759,8 +1759,8 @@ function App() {
                 <label>Date of Birth *</label>
                 <input
                   type="date"
-                  value={clientInfo.dateOfBirth}
-                  onChange={(e) => handleClientInfoChange('dateOfBirth', e.target.value)}
+                  value={patientInfo.dateOfBirth}
+                  onChange={(e) => handlePatientInfoChange('dateOfBirth', e.target.value)}
                   className="form-field"
                   required
                 />
@@ -1769,10 +1769,10 @@ function App() {
                 <label>Phone Number</label>
                 <input
                   type="tel"
-                  value={clientInfo.phoneNumber}
+                  value={patientInfo.phoneNumber}
                   onChange={(e) => {
                     const value = e.target.value.replace(/\D/g, '');
-                    handleClientInfoChange('phoneNumber', value);
+                    handlePatientInfoChange('phoneNumber', value);
                   }}
                   placeholder="37012312345"
                   className="form-field"
@@ -1786,8 +1786,8 @@ function App() {
               <div className="form-group">
                 <label>Address</label>
                 <textarea
-                  value={clientInfo.address}
-                  onChange={(e) => handleClientInfoChange('address', e.target.value)}
+                  value={patientInfo.address}
+                  onChange={(e) => handlePatientInfoChange('address', e.target.value)}
                   placeholder="Enter full address"
                   className="form-field address-field"
                   rows="4"
@@ -1797,8 +1797,8 @@ function App() {
                 <label>TIN (Tax Identification Number) *</label>
                 <input
                   type="text"
-                  value={clientInfo.tin}
-                  onChange={(e) => handleClientInfoChange('tin', e.target.value)}
+                  value={patientInfo.tin}
+                  onChange={(e) => handlePatientInfoChange('tin', e.target.value)}
                   placeholder="12345678901"
                   className="form-field"
                   pattern="[0-9]*"
@@ -1820,7 +1820,7 @@ function App() {
                       <label key={consent.consent_definition_id} className="consent-label">
                         <input
                           type="checkbox"
-                          checked={clientInfo.consents[consent.consent_definition_id] || false}
+                          checked={patientInfo.consents[consent.consent_definition_id] || false}
                           onChange={(e) => handleConsentChange(consent.consent_definition_id, e.target.checked)}
                           className="consent-checkbox"
                         />
@@ -1906,8 +1906,8 @@ function App() {
         <div className="categories-container">
           <h2>Select a Domain</h2>
           <p className="user-id-display">
-            Client: <strong>{clientInfo.firstName} {clientInfo.lastName}</strong>
-            {clientInfo.dateOfBirth && ` • DOB: ${clientInfo.dateOfBirth}`}
+            Patient: <strong>{patientInfo.firstName} {patientInfo.lastName}</strong>
+            {patientInfo.dateOfBirth && ` • DOB: ${patientInfo.dateOfBirth}`}
           </p>
 
           <div className="categories-grid">
@@ -2260,7 +2260,7 @@ function App() {
               {/* 3.2 Knowledge Rating (Radio) */}
               <div className="question-group">
                 <h4>3.2 Knowledge</h4>
-                <p className="question-help">Client's understanding of the problem (1-5 scale)</p>
+                <p className="question-help">Patient's understanding of the problem (1-5 scale)</p>
                 <div className="radio-options">
                   {outcomeRatings?.knowledge?.map(rating => (
                     <label key={rating.rating_knowledge_id} className="radio-label">
@@ -2282,7 +2282,7 @@ function App() {
               {/* 3.3 Behavior Rating (Radio) */}
               <div className="question-group">
                 <h4>3.3 Behavior</h4>
-                <p className="question-help">Appropriateness of client's behavior (1-5 scale)</p>
+                <p className="question-help">Appropriateness of patient's behavior (1-5 scale)</p>
                 <div className="radio-options">
                   {outcomeRatings?.behavior?.map(rating => (
                     <label key={rating.rating_behavior_id} className="radio-label">
@@ -2652,7 +2652,7 @@ function App() {
               {/* 3.2 Knowledge Rating (Radio) */}
               <div className="question-group">
                 <h4>3.2 Knowledge</h4>
-                <p className="question-help">Client's understanding of problem (1-5 scale)</p>
+                <p className="question-help">Patient's understanding of problem (1-5 scale)</p>
                 <div className="radio-options">
                   {outcomeRatings?.knowledge?.map(rating => (
                     <label key={rating.rating_knowledge_id} className="radio-label">
@@ -2674,7 +2674,7 @@ function App() {
               {/* 3.3 Behavior Rating (Radio) */}
               <div className="question-group">
                 <h4>3.3 Behavior</h4>
-                <p className="question-help">Appropriateness of client's behavior (1-5 scale)</p>
+                <p className="question-help">Appropriateness of patient's behavior (1-5 scale)</p>
                 <div className="radio-options">
                   {outcomeRatings?.behavior?.map(rating => (
                     <label key={rating.rating_behavior_id} className="radio-label">
@@ -2767,7 +2767,7 @@ function App() {
               {/* Knowledge Rating (Radio) */}
               <div className="question-group">
                 <h4>Knowledge</h4>
-                <p className="question-help">Client's understanding of the problem (1-5 scale)</p>
+                <p className="question-help">Patient's understanding of the problem (1-5 scale)</p>
                 <div className="radio-options">
                   {outcomeRatings?.knowledge?.map(rating => (
                     <label key={rating.rating_knowledge_id} className="radio-label">
@@ -2789,7 +2789,7 @@ function App() {
               {/* Behavior Rating (Radio) */}
               <div className="question-group">
                 <h4>Behavior</h4>
-                <p className="question-help">Appropriateness of client's behavior (1-5 scale)</p>
+                <p className="question-help">Appropriateness of patient's behavior (1-5 scale)</p>
                 <div className="radio-options">
                   {outcomeRatings?.behavior?.map(rating => (
                     <label key={rating.rating_behavior_id} className="radio-label">
