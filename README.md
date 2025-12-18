@@ -1,5 +1,7 @@
 # Omaha System Clinical Documentation App
 
+![License](https://img.shields.io/badge/license-MIT-green) ![Status](https://img.shields.io/badge/status-active-success) ![Docker](https://img.shields.io/badge/docker-supported-blue)
+
 A GDPR-compliant web application for documenting patient care using the standardized **Omaha System**.
 
 This project provides a digital workflow for the entire cycle of care: **Assessment** (Problems & Symptoms), **Intervention** (Care Pathways), and **Evaluation** (Outcome Scoring).
@@ -33,6 +35,10 @@ For more information, visit [omahasystem.org](https://www.omahasystem.org/).
 ### Disclaimer
 
 This software is provided for documentation and educational purposes only. It is not a substitute for professional medical advice, diagnosis, or treatment.
+
+## Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
 
 ## License
 
